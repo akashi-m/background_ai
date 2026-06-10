@@ -11,6 +11,7 @@ export function loadTextureCached(url: string): Promise<THREE.Texture> {
       return t
     })
     cache.set(url, p)
+    p.catch(() => cache.delete(url))
   }
   return p
 }

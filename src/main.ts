@@ -26,12 +26,12 @@ async function start() {
   addEventListener('resize', () => renderer.setSize(innerWidth, innerHeight))
 
   const mirrorScene = await buildMirrorScene()
-  const windowScene = await buildWindowScene()
+  const windowScene = await buildWindowScene(calibration.screenWcm, calibration.screenHcm)
   const modes = new ModeMachine()
 
   addEventListener('keydown', (e) => {
-    if (e.key.toLowerCase() === 'm' || e.key.toLowerCase() === 'ь') modes.switchTo('MIRROR')
-    if (e.key.toLowerCase() === 'w' || e.key.toLowerCase() === 'ц') modes.switchTo('WINDOW')
+    if (e.code === 'KeyM') modes.switchTo('MIRROR')
+    if (e.code === 'KeyW') modes.switchTo('WINDOW')
   })
 
   const camera = new THREE.PerspectiveCamera()

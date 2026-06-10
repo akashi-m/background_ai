@@ -20,7 +20,7 @@ export async function buildWindowScene(screenWcm: number, screenHcm: number): Pr
     widthCm: fit.widthCm,
     heightCm: fit.heightCm,
     zCm: Z,
-    depthAmountCm: 70,
+    depthAmountCm: 40, // деликатно: перила отделяются от города без «тянучек»
   })
   scene.add(backdrop)
 

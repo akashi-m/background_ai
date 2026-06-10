@@ -18,7 +18,7 @@ export interface DepthPhotoOptions {
   yCm?: number
 }
 
-const SEGMENTS = 256 // плотность сетки смещения
+const SEGMENTS = 384 // плотность сетки смещения (выше = меньше дрожи на границах объектов)
 
 // Подгонка фото под экран (cover-fit): на нейтральной позиции зрителя кадр
 // заполняет «проём» целиком, а запас (overscan) даёт место параллаксу,
@@ -57,8 +57,8 @@ export async function makeDepthPhotoMesh(opts: DepthPhotoOptions): Promise<THREE
         float d = texture2D(uDepth, uv).r; // 1 — близко, 0 — далеко
         // У краёв фото смещение гасим: иначе кромка «отрывается» от плоскости
         // и за ней видно пустоту (тянучки на краях кадра)
-        float edge = smoothstep(0.0, 0.06, uv.x) * smoothstep(1.0, 0.94, uv.x)
-                   * smoothstep(0.0, 0.08, uv.y) * smoothstep(1.0, 0.92, uv.y);
+        float edge = smoothstep(0.0, 0.03, uv.x) * smoothstep(1.0, 0.97, uv.x)
+                   * smoothstep(0.0, 0.04, uv.y) * smoothstep(1.0, 0.96, uv.y);
         vec3 p = position;
         p.z += d * uAmount * edge; // ближние пиксели — к зрителю
         gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);

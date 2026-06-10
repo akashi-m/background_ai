@@ -21,7 +21,7 @@ export async function buildMirrorScene(screenWcm: number, screenHcm: number): Pr
   } else if (SCENE_CONFIG.mirrorBackground === 'photo') {
     // Фото подгоняется под экран (cover-fit): весь кадр виден с нейтральной
     // позиции, запас по краям — на параллакс. Глубина даёт «жизнь»:
-    // кровать/растение/тапки выдвигаются к зрителю на ~50 см.
+    // кровать/растение/тапки чуть выдвигаются к зрителю.
     const { url, depthUrl, aspect } = SCENE_CONFIG.photoRoom
     const Z = -60
     const fit = fitCoverCm(aspect, Z, screenWcm, screenHcm)
@@ -31,7 +31,7 @@ export async function buildMirrorScene(screenWcm: number, screenHcm: number): Pr
       widthCm: fit.widthCm,
       heightCm: fit.heightCm,
       zCm: Z,
-      depthAmountCm: 50,
+      depthAmountCm: 28, // деликатно: больше = драматичнее, но тянет края объектов
     })
     scene.add(photo) // шейдер не использует свет — фото уже «запечено»
   } else {

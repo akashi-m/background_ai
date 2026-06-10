@@ -9,10 +9,10 @@ export const SCENE_CONFIG = {
   //  'procedural' — процедурная спальня (см. bedroom.ts), запасной вариант
   mirrorBackground: 'photo' as 'photo' | 'procedural',
 
-  // Фото: референсы заказчика → ре-рендер Gemini (nano banana) → апскейл
-  // Real-ESRGAN ×4 → карты глубины (scripts/gen-depth.mjs)
-  photoRoom: { url: '/assets/bedroom_eye.jpg', depthUrl: '/assets/bedroom_eye_depth.png', aspect: 4232 / 3968 },
-  cityView: { url: '/assets/city_wide.jpg', depthUrl: '/assets/city_wide_depth.png', aspect: 6336 / 2688 },
+  // Фото: ре-рендеры Gemini (nano banana) от заказчика КАК ЕСТЬ, без апскейла —
+  // пере-обработка мылит детали. Карты глубины: scripts/gen-depth.mjs
+  photoRoom: { url: '/assets/bedroom_eye.png', depthUrl: '/assets/bedroom_eye_depth.png', aspect: 1058 / 992 },
+  cityView: { url: '/assets/city_wide.png', depthUrl: '/assets/city_wide_depth.png', aspect: 1584 / 672 },
 
   // Габариты процедурной спальни (см): 3 × 4.5 м, потолок 2.7 м (по референсу).
   // Экран = «зеркало» на передней стене z=0, комната уходит в z<0.

@@ -33,4 +33,15 @@ describe('calibration', () => {
     expect(cal.screenWcm).toBe(99)
     expect(cal.screenHcm).toBe(DEFAULT_CALIBRATION.screenHcm)
   })
+
+  it('строковое значение поля → дефолт, без NaN', () => {
+    const s = fakeStorage({ 'stellar-mirror.calibration': '{"screenWcm": "abc"}' })
+    const cal = loadCalibration(s)
+    expect(cal.screenWcm).toBe(DEFAULT_CALIBRATION.screenWcm)
+  })
+
+  it('не-объект в хранилище → дефолты', () => {
+    const s = fakeStorage({ 'stellar-mirror.calibration': '[1,2,3]' })
+    expect(loadCalibration(s)).toEqual(DEFAULT_CALIBRATION)
+  })
 })

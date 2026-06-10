@@ -24,7 +24,16 @@ export function loadCalibration(storage: ReadStore = localStorage): Calibration 
   try {
     const raw = storage.getItem(KEY)
     if (!raw) return { ...DEFAULT_CALIBRATION }
-    return { ...DEFAULT_CALIBRATION, ...JSON.parse(raw) }
+    const parsed = JSON.parse(raw)
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return { ...DEFAULT_CALIBRATION }
+    }
+    const merged = { ...DEFAULT_CALIBRATION, ...parsed }
+    // Нечисловые/нефинитные значения полей откатываются к дефолтам
+    for (const k of Object.keys(DEFAULT_CALIBRATION) as (keyof Calibration)[]) {
+      if (typeof merged[k] !== 'number' || !isFinite(merged[k])) merged[k] = DEFAULT_CALIBRATION[k]
+    }
+    return merged as Calibration
   } catch {
     return { ...DEFAULT_CALIBRATION }
   }

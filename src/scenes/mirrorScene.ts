@@ -77,7 +77,7 @@ export async function buildMirrorScene(): Promise<THREE.Scene> {
     )
     lampPole.position.set(150, -H / 2 + 75, -120)
     scene.add(lampPole)
-    const lampLight = new THREE.PointLight(0xffd9a0, 30000, 0, 2)
+    const lampLight = new THREE.PointLight(0xffd9a0, 20000, 0, 2)
     lampLight.position.set(150, 20, -120)
     scene.add(lampLight)
   }

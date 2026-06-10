@@ -14,6 +14,7 @@ async function start() {
   const renderer = new THREE.WebGLRenderer({ antialias: true })
   renderer.setSize(innerWidth, innerHeight)
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
+  renderer.toneMapping = THREE.ACESFilmicToneMapping
   document.body.appendChild(renderer.domElement)
   addEventListener('resize', () => renderer.setSize(innerWidth, innerHeight))
 
@@ -25,7 +26,10 @@ async function start() {
     const dt = Math.min((now - last) / 1000, 0.1)
     last = now
     const eye = tracker.update(now, dt)
-    applyOffAxis(camera, eye, calibration.screenWcm, calibration.screenHcm)
+    const safeEye = { x: eye.x, y: eye.y, z: Math.min(Math.max(eye.z, 20), 300) }
+    // окно браузера может быть не на весь экран: переводим px → см через калибровку
+    const cmPerPx = calibration.screenWcm / screen.width
+    applyOffAxis(camera, safeEye, innerWidth * cmPerPx, innerHeight * cmPerPx)
     renderer.render(scene, camera)
   })
 }

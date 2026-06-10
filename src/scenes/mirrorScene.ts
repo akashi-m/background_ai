@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { SCENE_CONFIG } from './config'
+import { loadTextureCached } from './textures'
 
 // Процедурная «жилая комната»: пол, стены, окно с видом, мебель-болванки.
 // Качество — уровня прототипа: проверяем параллакс, не архвиз.
@@ -40,8 +41,7 @@ export async function buildMirrorScene(): Promise<THREE.Scene> {
     scene.add(right)
 
     // Окно на задней стене: светящаяся «панорама» + рама
-    const tex = await new THREE.TextureLoader().loadAsync(SCENE_CONFIG.cityPanoramaUrl)
-    tex.colorSpace = THREE.SRGBColorSpace
+    const tex = await loadTextureCached(SCENE_CONFIG.cityPanoramaUrl)
     const view = new THREE.Mesh(
       new THREE.PlaneGeometry(160, 120),
       new THREE.MeshBasicMaterial({ map: tex })

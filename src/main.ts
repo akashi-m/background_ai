@@ -5,7 +5,9 @@ import { PersonSegmenter } from './tracking/segmenter'
 import { loadCalibration } from './app/calibration'
 import { applyOffAxis } from './render/offAxis'
 import { buildMirrorScene } from './scenes/mirrorScene'
+import { buildWindowScene } from './scenes/windowScene'
 import { Compositor } from './render/compositor'
+import { ModeMachine } from './app/modes'
 
 async function start() {
   const video = await openCamera()
@@ -23,21 +25,32 @@ async function start() {
   document.body.appendChild(renderer.domElement)
   addEventListener('resize', () => renderer.setSize(innerWidth, innerHeight))
 
-  const scene = await buildMirrorScene()
+  const mirrorScene = await buildMirrorScene()
+  const windowScene = await buildWindowScene()
+  const modes = new ModeMachine()
+
+  addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() === 'm' || e.key.toLowerCase() === 'ь') modes.switchTo('MIRROR')
+    if (e.key.toLowerCase() === 'w' || e.key.toLowerCase() === 'ц') modes.switchTo('WINDOW')
+  })
+
   const camera = new THREE.PerspectiveCamera()
 
   let last = performance.now()
   renderer.setAnimationLoop((now) => {
     const dt = Math.min((now - last) / 1000, 0.1)
     last = now
+    modes.update(dt)
     const eye = tracker.update(now, dt)
     const safeEye = { x: eye.x, y: eye.y, z: Math.min(Math.max(eye.z, 20), 300) }
     // окно браузера может быть не на весь экран: переводим px → см через калибровку
     const cmPerPx = calibration.screenWcm / screen.width
     applyOffAxis(camera, safeEye, innerWidth * cmPerPx, innerHeight * cmPerPx)
+    const scene = modes.mode === 'MIRROR' ? mirrorScene : windowScene
     renderer.render(scene, camera)
     segmenter.update(now)
-    compositor.render(renderer, segmenter.texture, 1, 0)
+    const personOpacity = modes.mode === 'MIRROR' ? 1 : 0
+    compositor.render(renderer, segmenter.texture, personOpacity, modes.fade)
   })
 }
 

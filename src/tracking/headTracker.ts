@@ -4,7 +4,8 @@ import { eyePositionCm, type FaceInVideo } from './headPose'
 import type { EyeCm } from '../render/offAxis'
 import type { Calibration } from '../app/calibration'
 
-const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
+// ВАЖНО: версия WASM должна совпадать с версией пакета в package.json
+const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm'
 const MODEL_URL =
   'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
 
@@ -49,7 +50,6 @@ export class HeadTracker {
 
     this.faceVisible = nowMs - this.lastSeenMs < LOST_AFTER_MS
     const goal = this.faceVisible ? this.target : NEUTRAL
-    if (!this.faceVisible) this.filter.reset() // после паузы — подхват без рывка из старой истории
 
     // Экспоненциальное приближение к цели + One-Euro поверх: плавно и без дрожи
     const k = 1 - Math.exp(-dt * 10)
@@ -58,7 +58,7 @@ export class HeadTracker {
       y: this.current.y + (goal.y - this.current.y) * k,
       z: this.current.z + (goal.z - this.current.z) * k,
     }
-    return this.faceVisible ? this.filter.filter(this.current, dt) : this.current
+    return this.filter.filter(this.current, dt)
   }
 
   // Ближайшее лицо = самое большое межзрачковое расстояние в пикселях

@@ -78,7 +78,7 @@ export class DebugPanel {
         `возраст кадра камеры: ~${videoLagMs.toFixed(0)} мс\n` +
         `eye: x=${eye.x.toFixed(1)} y=${eye.y.toFixed(1)} z=${eye.z.toFixed(1)} см\n` +
         `лицо: ${faceVisible ? 'да' : 'нет'}\n` +
-        `клавиши: M зеркало, W окно, C калибровка`
+        `клавиши: M комната, W балкон, C калибровка`
     }
   }
 }

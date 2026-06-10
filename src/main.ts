@@ -9,14 +9,16 @@ import { buildWindowScene } from './scenes/windowScene'
 import { Compositor } from './render/compositor'
 import { ModeMachine } from './app/modes'
 import { DebugPanel } from './debug/panel'
+import { SCENE_CONFIG } from './scenes/config'
 
 async function start() {
   const video = await openCamera()
   const calibration = loadCalibration()
   const tracker = new HeadTracker(video, calibration)
   await tracker.init()
-  const segmenter = new PersonSegmenter(video)
-  await segmenter.init()
+  // Вид от первого лица: сегментация не нужна — не грузим модель вовсе
+  const segmenter = SCENE_CONFIG.showPerson ? new PersonSegmenter(video) : null
+  if (segmenter) await segmenter.init()
   const compositor = new Compositor(video)
 
   const renderer = new THREE.WebGLRenderer({ antialias: true })
@@ -64,10 +66,10 @@ async function start() {
     // ЗАМЕТКА (fps): детекция лица и сегментация гейтятся одним и тем же новым кадром
     // камеры — раз в ~33 мс один тик rAF несёт обе ML-инференции + рендер.
     // Если ручной тест покажет провалы fps — разнести их по чётным/нечётным кадрам.
-    segmenter.update(now)
+    segmenter?.update(now)
     const personOpacity = modes.mode === 'MIRROR' ? 1 : 0
-    compositor.render(renderer, segmenter.texture, personOpacity, modes.fade)
-    debug.frame(safeEye, tracker.faceVisible, segmenter.fps, performance.now() - lastVideoFrameAt)
+    compositor.render(renderer, segmenter?.texture ?? null, personOpacity, modes.fade)
+    debug.frame(safeEye, tracker.faceVisible, segmenter?.fps ?? 0, performance.now() - lastVideoFrameAt)
   })
 }
 

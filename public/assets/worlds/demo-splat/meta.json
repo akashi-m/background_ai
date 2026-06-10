@@ -1,0 +1,8 @@
+{
+  "title": "Демо-сплат (бабочка Spark)",
+  "format": "splat",
+  "file": "world.spz",
+  "transform": { "position": [0, 0, -100], "rotationYDeg": 0, "scale": 100 },
+  "dollyMaxCm": 80,
+  "source": "sparkjs.dev sample"
+}

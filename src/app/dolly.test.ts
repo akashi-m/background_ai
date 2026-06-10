@@ -32,4 +32,11 @@ describe('dollyFromEyeZ', () => {
     expect(dollyFromEyeZ(DEFAULT_DOLLY_RANGE.farCm - 2, MAX)).toBeLessThan(1)
     expect(dollyFromEyeZ(DEFAULT_DOLLY_RANGE.nearCm + 2, MAX)).toBeGreaterThan(MAX - 1)
   })
+
+  it('вырожденный диапазон (far <= near) не даёт NaN', () => {
+    const r = { farCm: 50, nearCm: 50 }
+    expect(dollyFromEyeZ(50, MAX, r)).toBe(0)
+    expect(dollyFromEyeZ(40, MAX, r)).toBe(MAX)
+    expect(Number.isNaN(dollyFromEyeZ(60, MAX, r))).toBe(false)
+  })
 })

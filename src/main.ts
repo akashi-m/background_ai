@@ -8,6 +8,7 @@ import { buildMirrorScene } from './scenes/mirrorScene'
 import { buildWindowScene } from './scenes/windowScene'
 import { Compositor } from './render/compositor'
 import { ModeMachine } from './app/modes'
+import { DebugPanel } from './debug/panel'
 
 async function start() {
   const video = await openCamera()
@@ -34,6 +35,16 @@ async function start() {
     if (e.code === 'KeyW') modes.switchTo('WINDOW')
   })
 
+  const debug = new DebugPanel(calibration, () => { /* размеры экрана подхватятся в следующем кадре */ })
+
+  // возраст последнего кадра камеры — грубая оценка вклада камеры в задержку
+  let lastVideoFrameAt = performance.now()
+  const onVideoFrame = () => {
+    lastVideoFrameAt = performance.now()
+    ;(video as HTMLVideoElement & { requestVideoFrameCallback(cb: () => void): void }).requestVideoFrameCallback(onVideoFrame)
+  }
+  ;(video as HTMLVideoElement & { requestVideoFrameCallback(cb: () => void): void }).requestVideoFrameCallback(onVideoFrame)
+
   const camera = new THREE.PerspectiveCamera()
 
   let last = performance.now()
@@ -51,6 +62,7 @@ async function start() {
     segmenter.update(now)
     const personOpacity = modes.mode === 'MIRROR' ? 1 : 0
     compositor.render(renderer, segmenter.texture, personOpacity, modes.fade)
+    debug.frame(safeEye, tracker.faceVisible, segmenter.fps, performance.now() - lastVideoFrameAt)
   })
 }
 

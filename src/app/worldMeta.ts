@@ -37,6 +37,7 @@ export function parseWorldMeta(json: unknown, worldName: string): WorldMeta {
 
   let transform = DEFAULT_TRANSFORM
   if (j.transform !== undefined) {
+    if (typeof j.transform !== 'object' || j.transform === null || Array.isArray(j.transform)) fail(worldName, 'кривой transform')
     const t = j.transform as Record<string, unknown>
     const pos = t.position
     const okPos = Array.isArray(pos) && pos.length === 3 && pos.every((v) => typeof v === 'number' && isFinite(v))

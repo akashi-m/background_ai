@@ -56,4 +56,8 @@ describe('parseWorldMeta', () => {
   it('кривой transform.scale (0, NaN) → ошибка', () => {
     expect(() => parseWorldMeta({ ...VALID_SPLAT, transform: { position: [0,0,0], rotationYDeg: 0, scale: 0 } }, 'b')).toThrow(/b/)
   })
+
+  it('transform: null → структурная ошибка, не TypeError', () => {
+    expect(() => parseWorldMeta({ ...VALID_SPLAT, transform: null }, 'b')).toThrow(/Битый meta.json мира «b»/)
+  })
 })

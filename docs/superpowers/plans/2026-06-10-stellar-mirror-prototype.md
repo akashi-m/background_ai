@@ -625,7 +625,7 @@ import { eyePositionCm, type FaceInVideo } from './headPose'
 import type { EyeCm } from '../render/offAxis'
 import type { Calibration } from '../app/calibration'
 
-const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
+const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm'
 const MODEL_URL =
   'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
 
@@ -938,7 +938,7 @@ git add -A && git commit -m "feat: процедурная комната + off-a
 import { ImageSegmenter, FilesetResolver } from '@mediapipe/tasks-vision'
 import * as THREE from 'three'
 
-const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
+const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm'
 const MODEL_URL =
   'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite'
 

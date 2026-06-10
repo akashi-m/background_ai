@@ -1,0 +1,59 @@
+import { describe, it, expect } from 'vitest'
+import { parseWorldMeta } from './worldMeta'
+
+const VALID_SPLAT = {
+  title: 'Спальня',
+  format: 'splat',
+  file: 'world.spz',
+}
+
+const VALID_PHOTO = {
+  title: 'Балкон',
+  format: 'photo25d',
+  file: 'photo.png',
+  depthFile: 'depth.png',
+  aspect: 2.357,
+}
+
+describe('parseWorldMeta', () => {
+  it('валидный splat-мир: дефолты подставляются', () => {
+    const m = parseWorldMeta(VALID_SPLAT, 'bedroom')
+    expect(m.format).toBe('splat')
+    expect(m.transform).toEqual({ position: [0, 0, 0], rotationYDeg: 0, scale: 1 })
+    expect(m.dollyMaxCm).toBe(150)
+  })
+
+  it('валидный photo25d-мир с aspect', () => {
+    const m = parseWorldMeta(VALID_PHOTO, 'balcony')
+    expect(m.format).toBe('photo25d')
+    expect(m.aspect).toBeCloseTo(2.357)
+  })
+
+  it('кастомный transform сохраняется', () => {
+    const m = parseWorldMeta(
+      { ...VALID_SPLAT, transform: { position: [1, 2, 3], rotationYDeg: 90, scale: 2.5 } },
+      'bedroom',
+    )
+    expect(m.transform.scale).toBe(2.5)
+    expect(m.transform.position).toEqual([1, 2, 3])
+  })
+
+  it('неизвестный format → ошибка с именем мира', () => {
+    expect(() => parseWorldMeta({ ...VALID_SPLAT, format: 'mesh' }, 'bedroom'))
+      .toThrow(/bedroom/)
+  })
+
+  it('photo25d без depthFile или aspect → ошибка', () => {
+    expect(() => parseWorldMeta({ ...VALID_PHOTO, depthFile: undefined }, 'balcony')).toThrow(/balcony/)
+    expect(() => parseWorldMeta({ ...VALID_PHOTO, aspect: undefined }, 'balcony')).toThrow(/balcony/)
+  })
+
+  it('не-объект → ошибка', () => {
+    expect(() => parseWorldMeta(null, 'x')).toThrow(/x/)
+    expect(() => parseWorldMeta('hello', 'x')).toThrow(/x/)
+  })
+
+  it('кривой transform.scale (0, NaN) → ошибка', () => {
+    expect(() => parseWorldMeta({ ...VALID_SPLAT, transform: { position: [0,0,0], rotationYDeg: 0, scale: 0 } }, 'b')).toThrow(/b/)
+  })
+})

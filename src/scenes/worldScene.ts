@@ -11,6 +11,22 @@ export interface BuiltWorld {
   dolly: THREE.Group
   root: THREE.Group
   meta: WorldMeta
+  name: string
+  // Живая ручка силы 2.5D-объёма (только photo25d; для сплатов undefined)
+  setDepthAmount?: (cm: number) => void
+  depthAmountCm?: number
+}
+
+const DEPTH_KEY_PREFIX = 'stellar-mirror.depth.'
+
+// Сохранённая оператором сила объёма перекрывает meta.json (как у выравнивания)
+function loadDepthOverride(name: string): number | null {
+  const v = Number(localStorage.getItem(DEPTH_KEY_PREFIX + name))
+  return Number.isFinite(v) && v >= 0 && v <= 200 ? v : null
+}
+
+export function saveDepthOverride(name: string, cm: number): void {
+  localStorage.setItem(DEPTH_KEY_PREFIX + name, String(cm))
 }
 
 export async function buildWorld(
@@ -39,6 +55,8 @@ export async function buildWorld(
     console.info(`мир «${name}»: применено выравнивание из localStorage — meta.json игнорируется (очистить: localStorage.removeItem('stellar-mirror.align.${name}'))`)
   }
 
+  const built: BuiltWorld = { scene, dolly, root, meta, name }
+
   if (meta.format === 'splat') {
     const url = baseUrl + meta.file
     // SparkRenderer должен лежать в той сцене, которую рендерим
@@ -54,6 +72,7 @@ export async function buildWorld(
       throw new Error(`Не загрузился ассет: ${url} (${e instanceof Error ? e.message : String(e)})`)
     }
   } else {
+    const depthAmountCm = loadDepthOverride(name) ?? meta.depthAmountCm ?? 60
     const fit = fitCoverCm(meta.aspect!, -60, screenWcm, screenHcm)
     const mesh = await makeDepthPhotoMesh({
       photoUrl: baseUrl + meta.file,
@@ -61,10 +80,16 @@ export async function buildWorld(
       widthCm: fit.widthCm,
       heightCm: fit.heightCm,
       zCm: -60,
-      depthAmountCm: 28,
+      depthAmountCm,
     })
     root.add(mesh)
+    const mat = mesh.material as THREE.ShaderMaterial
+    built.depthAmountCm = depthAmountCm
+    built.setDepthAmount = (cm) => {
+      mat.uniforms.uAmount.value = cm
+      built.depthAmountCm = cm
+    }
   }
 
-  return { scene, dolly, root, meta }
+  return built
 }

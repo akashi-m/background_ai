@@ -60,4 +60,10 @@ describe('parseWorldMeta', () => {
   it('transform: null → структурная ошибка, не TypeError', () => {
     expect(() => parseWorldMeta({ ...VALID_SPLAT, transform: null }, 'b')).toThrow(/Битый meta.json мира «b»/)
   })
+
+  it('depthAmountCm: валидный сохраняется, кривой — ошибка', () => {
+    expect(parseWorldMeta({ ...VALID_PHOTO, depthAmountCm: 70 }, 'b').depthAmountCm).toBe(70)
+    expect(parseWorldMeta(VALID_PHOTO, 'b').depthAmountCm).toBeUndefined()
+    expect(() => parseWorldMeta({ ...VALID_PHOTO, depthAmountCm: -1 }, 'b')).toThrow(/b/)
+  })
 })

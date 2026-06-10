@@ -13,6 +13,7 @@ export interface WorldMeta {
   aspect?: number     // только photo25d (ширина/высота фото)
   transform: WorldTransform
   dollyMaxCm: number
+  depthAmountCm?: number // photo25d: сила 2.5D-объёма (дефолт 60)
   source?: string     // происхождение (marble:<id>, съёмка, ...)
 }
 
@@ -53,6 +54,12 @@ export function parseWorldMeta(json: unknown, worldName: string): WorldMeta {
     dollyMaxCm = j.dollyMaxCm
   }
 
+  let depthAmountCm: number | undefined
+  if (j.depthAmountCm !== undefined) {
+    if (typeof j.depthAmountCm !== 'number' || !isFinite(j.depthAmountCm) || j.depthAmountCm < 0) fail(worldName, 'кривой depthAmountCm')
+    depthAmountCm = j.depthAmountCm
+  }
+
   return {
     title: j.title,
     format: j.format,
@@ -61,6 +68,7 @@ export function parseWorldMeta(json: unknown, worldName: string): WorldMeta {
     aspect: typeof j.aspect === 'number' ? j.aspect : undefined,
     transform,
     dollyMaxCm,
+    depthAmountCm,
     source: typeof j.source === 'string' ? j.source : undefined,
   }
 }

@@ -6,7 +6,7 @@ import { applyOffAxis } from './render/offAxis'
 import { Compositor } from './render/compositor'
 import { WorldSwitcher } from './app/worldSwitcher'
 import { parseWorldMeta } from './app/worldMeta'
-import { buildWorld, type BuiltWorld } from './scenes/worldScene'
+import { buildWorld, saveDepthOverride, type BuiltWorld } from './scenes/worldScene'
 import { dollyFromEyeZ } from './app/dolly'
 import { DebugPanel } from './debug/panel'
 import { AlignController } from './debug/align'
@@ -67,8 +67,29 @@ async function start() {
 
   // Усиление параллакса масштабируется под экран: на проде (~120 см) — 1:1,
   // на ноутбуке мягче, иначе движение головы больше самого экрана.
+  // Живые ручки (сохраняются): , . — отклик на голову; ; ' — глубина 2.5D активного мира
   const PRODUCTION_SCREEN_W_CM = 120
-  const parallaxGain = Math.min(1, Math.max(0.25, calibration.screenWcm / PRODUCTION_SCREEN_W_CM))
+  const savedGain = Number(localStorage.getItem('stellar-mirror.parallaxGain'))
+  let parallaxGain = Number.isFinite(savedGain) && savedGain > 0 && savedGain <= 2
+    ? savedGain
+    : Math.min(1, Math.max(0.5, calibration.screenWcm / PRODUCTION_SCREEN_W_CM))
+
+  addEventListener('keydown', (e) => {
+    if (e.target instanceof HTMLInputElement) return
+    if (e.code === 'Comma' || e.code === 'Period') {
+      parallaxGain = Math.round(Math.min(2, Math.max(0.1, parallaxGain + (e.code === 'Period' ? 0.05 : -0.05))) * 100) / 100
+      localStorage.setItem('stellar-mirror.parallaxGain', String(parallaxGain))
+      console.log(`параллакс-гейн: ${parallaxGain}`)
+    }
+    if (e.code === 'Semicolon' || e.code === 'Quote') {
+      const w = worlds[switcher.index]
+      if (!w.setDepthAmount || w.depthAmountCm === undefined) return
+      const cm = Math.min(200, Math.max(0, w.depthAmountCm + (e.code === 'Quote' ? 5 : -5)))
+      w.setDepthAmount(cm)
+      saveDepthOverride(w.name, cm)
+      console.log(`глубина 2.5D «${w.name}»: ${cm} см`)
+    }
+  })
 
   const camera = new THREE.PerspectiveCamera()
 

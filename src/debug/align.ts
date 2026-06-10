@@ -10,7 +10,18 @@ const KEY_PREFIX = 'stellar-mirror.align.'
 export function loadAlignOverride(worldName: string): WorldTransform | null {
   try {
     const raw = localStorage.getItem(KEY_PREFIX + worldName)
-    return raw ? (JSON.parse(raw) as WorldTransform) : null
+    if (!raw) return null
+    const t = JSON.parse(raw) as Record<string, unknown>
+    const pos = t.position
+    const ok =
+      Array.isArray(pos) && pos.length === 3 && pos.every((v) => typeof v === 'number' && isFinite(v)) &&
+      typeof t.rotationYDeg === 'number' && isFinite(t.rotationYDeg) &&
+      typeof t.scale === 'number' && isFinite(t.scale) && t.scale > 0
+    if (!ok) {
+      console.warn(`битое сохранённое выравнивание «${worldName}» — игнорирую`)
+      return null
+    }
+    return t as unknown as WorldTransform
   } catch {
     return null
   }
@@ -68,7 +79,7 @@ export class AlignController {
         Math.round(root.position.z * 10) / 10,
       ],
       rotationYDeg: Math.round((root.rotation.y * 180) / Math.PI * 10) / 10,
-      scale: Math.round(root.scale.x * 1000) / 1000,
+      scale: Math.round(root.scale.x * 1000) / 1000, // setScalar всюду → x===y===z
     }
   }
 

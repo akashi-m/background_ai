@@ -6,12 +6,17 @@ export interface Calibration {
   webcamHfovDeg: number  // горизонтальный угол обзора вебки, градусы
 }
 
-// Дефолты под MacBook Pro 14": экран ~30×19.5 см, камера в верхней кромке.
+// Дефолты сняты с реальной машины разработчика: MacBook Pro 14"
+// (Liquid Retina XDR 3024×1964, видимая область 30.41×19.74 см).
+// Камера в чёлке — ВНУТРИ области экрана у верхней кромки, поэтому
+// смещение по Y чуть МЕНЬШЕ половины высоты (центр чёлки ≈ 4 мм от кромки).
+// Для внешнего экрана (например, Samsung Odyssey G9 49": 119.3×33.6 см)
+// значения вводятся через панель калибровки (клавиша C).
 export const DEFAULT_CALIBRATION: Calibration = {
-  screenWcm: 30.4,
-  screenHcm: 19.5,
+  screenWcm: 30.41,
+  screenHcm: 19.74,
   camOffsetXcm: 0,
-  camOffsetYcm: 10.3,
+  camOffsetYcm: 9.5,
   webcamHfovDeg: 63,
 }
 

@@ -2,20 +2,29 @@ import * as THREE from 'three'
 import { SCENE_CONFIG } from './config'
 import { loadTextureCached } from './textures'
 
-// Экран = окно квартиры: панорама города на сфере + рама близко к плоскости экрана.
-// Рама — главный источник параллакса (панорама далеко, сдвигается слабо).
+// Экран = окно квартиры: фото вечернего города как задник + рама у плоскости экрана.
+// Рама — главный источник параллакса (город далеко, сдвигается слабо).
+// Задник — ОБЫЧНОЕ фото (не панорама), поэтому плоскость, а не сфера.
 export async function buildWindowScene(screenWcm: number, screenHcm: number): Promise<THREE.Scene> {
   const scene = new THREE.Scene()
 
-  const tex = await loadTextureCached(SCENE_CONFIG.cityPanoramaUrl)
-  // Инвертируем X у сферы: смотрим изнутри, картинка не зеркалится (вместо BackSide)
-  const geo = new THREE.SphereGeometry(5000, 48, 32)
-  geo.scale(-1, 1, 1)
-  const sky = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: tex }))
-  scene.add(sky)
+  const tex = await loadTextureCached(SCENE_CONFIG.cityViewUrl)
+  // Размер задника: должен покрывать обзор через «окно» при крайних позициях головы.
+  // Глубина 180 см — компромисс: ближе = заметнее параллакс рамы, дальше = резче фото.
+  const BACKDROP_Z = -180
+  const BACKDROP_W = 400
+  const BACKDROP_H = BACKDROP_W * (981 / 736) // аспект фото
+  const backdrop = new THREE.Mesh(
+    new THREE.PlaneGeometry(BACKDROP_W, BACKDROP_H),
+    new THREE.MeshBasicMaterial({ map: tex })
+  )
+  // Центр чуть ниже уровня глаз: линия горизонта города ~ на уровне взгляда,
+  // балконные перила с фото остаются под нижней кромкой «окна».
+  backdrop.position.set(0, -40, BACKDROP_Z)
+  scene.add(backdrop)
 
   // Рама окна сразу за плоскостью экрана, размер из калибровки
-  const frameMat = new THREE.MeshLambertMaterial({ color: 0xf2efe9 })
+  const frameMat = new THREE.MeshLambertMaterial({ color: 0x2a2a2e }) // тёмная, как в референсе
   const halfW = screenWcm / 2
   const halfH = screenHcm / 2
   const t = Math.max(1.5, screenWcm * 0.04) // толщина рамы, см — масштабируется с экраном

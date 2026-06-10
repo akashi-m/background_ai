@@ -1,15 +1,20 @@
 import * as THREE from 'three'
 import { openCamera, showFatalError } from './tracking/camera'
 import { HeadTracker } from './tracking/headTracker'
+import { PersonSegmenter } from './tracking/segmenter'
 import { loadCalibration } from './app/calibration'
 import { applyOffAxis } from './render/offAxis'
 import { buildMirrorScene } from './scenes/mirrorScene'
+import { Compositor } from './render/compositor'
 
 async function start() {
   const video = await openCamera()
   const calibration = loadCalibration()
   const tracker = new HeadTracker(video, calibration)
   await tracker.init()
+  const segmenter = new PersonSegmenter(video)
+  await segmenter.init()
+  const compositor = new Compositor(video)
 
   const renderer = new THREE.WebGLRenderer({ antialias: true })
   renderer.setSize(innerWidth, innerHeight)
@@ -31,6 +36,8 @@ async function start() {
     const cmPerPx = calibration.screenWcm / screen.width
     applyOffAxis(camera, safeEye, innerWidth * cmPerPx, innerHeight * cmPerPx)
     renderer.render(scene, camera)
+    segmenter.update(now)
+    compositor.render(renderer, segmenter.texture, 1, 0)
   })
 }
 

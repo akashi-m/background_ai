@@ -12,11 +12,6 @@ export interface BuiltWorld {
   meta: WorldMeta
 }
 
-async function assertExists(url: string): Promise<void> {
-  const res = await fetch(url, { method: 'HEAD' })
-  if (!res.ok) throw new Error(`Не загрузился ассет: ${url} (HTTP ${res.status})`)
-}
-
 export async function buildWorld(
   baseUrl: string, // '/assets/worlds/bedroom/'
   meta: WorldMeta,
@@ -35,10 +30,18 @@ export async function buildWorld(
 
   if (meta.format === 'splat') {
     const url = baseUrl + meta.file
-    await assertExists(url)
     // SparkRenderer должен лежать в той сцене, которую рендерим
     scene.add(new SparkRenderer({ renderer }))
-    root.add(new SplatMesh({ url })) // Spark грузит и стримит сам (LOD)
+    const splat = new SplatMesh({ url })
+    // Сплаты конвенционально Y-вниз (PLY/SPZ); переворачиваем в Y-вверх three.js.
+    // Поворот мира вокруг Y из meta.transform применяется выше, на root.
+    splat.quaternion.set(1, 0, 0, 0)
+    root.add(splat)
+    try {
+      await splat.initialized
+    } catch (e) {
+      throw new Error(`Не загрузился ассет: ${url} (${e instanceof Error ? e.message : String(e)})`)
+    }
   } else {
     const fit = fitCoverCm(meta.aspect!, -60, screenWcm, screenHcm)
     const mesh = await makeDepthPhotoMesh({

@@ -28,9 +28,15 @@ async function start() {
   document.body.appendChild(renderer.domElement)
   addEventListener('resize', () => renderer.setSize(innerWidth, innerHeight))
 
-  const mirrorScene = await buildMirrorScene()
-  const windowScene = await buildWindowScene()
+  const mirrorScene = await buildMirrorScene(calibration.screenWcm, calibration.screenHcm)
+  const windowScene = await buildWindowScene(calibration.screenWcm, calibration.screenHcm)
   const modes = new ModeMachine()
+
+  // Усиление параллакса масштабируется под экран: на проде (~120 см шириной)
+  // голова двигается «честно» 1:1, на ноутбуке отклик мягче — иначе движение
+  // головы (±40 см) больше самого экрана (30 см) и кадр улетает за края фото.
+  const PRODUCTION_SCREEN_W_CM = 120
+  const parallaxGain = Math.min(1, Math.max(0.25, calibration.screenWcm / PRODUCTION_SCREEN_W_CM))
 
   addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLInputElement) return
@@ -57,7 +63,11 @@ async function start() {
     last = now
     modes.update(dt)
     const eye = tracker.update(now, dt)
-    const safeEye = { x: eye.x, y: eye.y, z: Math.min(Math.max(eye.z, 20), 300) }
+    const safeEye = {
+      x: eye.x * parallaxGain,
+      y: eye.y * parallaxGain,
+      z: Math.min(Math.max(eye.z, 20), 300),
+    }
     // окно браузера может быть не на весь экран: переводим px → см через калибровку
     const cmPerPx = calibration.screenWcm / screen.width
     applyOffAxis(camera, safeEye, innerWidth * cmPerPx, innerHeight * cmPerPx)

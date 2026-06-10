@@ -20,6 +20,21 @@ export interface DepthPhotoOptions {
 
 const SEGMENTS = 256 // плотность сетки смещения
 
+// Подгонка фото под экран (cover-fit): на нейтральной позиции зрителя кадр
+// заполняет «проём» целиком, а запас (overscan) даёт место параллаксу,
+// чтобы при движении головы не выезжали края фото.
+export function fitCoverCm(
+  photoAspect: number, zCm: number,
+  screenWcm: number, screenHcm: number,
+  overscan = 1.35, eyeZcm = 60,
+): { widthCm: number; heightCm: number } {
+  const k = (eyeZcm + Math.abs(zCm)) / eyeZcm // во сколько раз фрустум шире экрана на этой глубине
+  const frustumW = screenWcm * k
+  const frustumH = screenHcm * k
+  const widthCm = Math.max(frustumW, frustumH * photoAspect) * overscan
+  return { widthCm, heightCm: widthCm / photoAspect }
+}
+
 export async function makeDepthPhotoMesh(opts: DepthPhotoOptions): Promise<THREE.Mesh> {
   const loader = new THREE.TextureLoader()
   const load = (url: string) =>
@@ -40,8 +55,12 @@ export async function makeDepthPhotoMesh(opts: DepthPhotoOptions): Promise<THREE
       void main() {
         vUv = uv;
         float d = texture2D(uDepth, uv).r; // 1 — близко, 0 — далеко
+        // У краёв фото смещение гасим: иначе кромка «отрывается» от плоскости
+        // и за ней видно пустоту (тянучки на краях кадра)
+        float edge = smoothstep(0.0, 0.06, uv.x) * smoothstep(1.0, 0.94, uv.x)
+                   * smoothstep(0.0, 0.08, uv.y) * smoothstep(1.0, 0.92, uv.y);
         vec3 p = position;
-        p.z += d * uAmount; // ближние пиксели — к зрителю
+        p.z += d * uAmount * edge; // ближние пиксели — к зрителю
         gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
       }
     `,

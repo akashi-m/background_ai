@@ -1,28 +1,26 @@
 import * as THREE from 'three'
 import { SCENE_CONFIG } from './config'
-import { makeDepthPhotoMesh } from './depthPhoto'
+import { makeDepthPhotoMesh, fitCoverCm } from './depthPhoto'
 
 // Экран = выход на балкон: широкое фото вечернего города как 2.5D-задник.
 // Параллакс делает сам снимок: перила балкона на переднем плане (по карте
 // глубины) сдвигаются относительно далёкого города. Никакой рисованной рамы —
 // всё, что видно, настоящее фото.
-export async function buildWindowScene(): Promise<THREE.Scene> {
+export async function buildWindowScene(screenWcm: number, screenHcm: number): Promise<THREE.Scene> {
   const scene = new THREE.Scene()
 
-  // Размер задника: с запасом, чтобы крайние позиции головы не выходили
-  // за фото. Дальний план на -200 см, перила выходят на ~ -60 см.
+  // Фото подгоняется под экран (cover-fit, 21:9 шире экрана — бока в запас
+  // параллаксу). Дальний план на -90 см, перила выходят на ~ -20 см.
   const { url, depthUrl, aspect } = SCENE_CONFIG.cityView
-  const widthCm = 560
+  const Z = -90
+  const fit = fitCoverCm(aspect, Z, screenWcm, screenHcm, 1.2)
   const backdrop = await makeDepthPhotoMesh({
     photoUrl: url,
     depthUrl,
-    widthCm,
-    heightCm: widthCm / aspect,
-    zCm: -200,
-    depthAmountCm: 140,
-    // Центр чуть ниже уровня глаз: горизонт города ~ на уровне взгляда,
-    // перила — в нижней части кадра
-    yCm: -20,
+    widthCm: fit.widthCm,
+    heightCm: fit.heightCm,
+    zCm: Z,
+    depthAmountCm: 70,
   })
   scene.add(backdrop)
 

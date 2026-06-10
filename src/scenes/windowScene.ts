@@ -1,26 +1,28 @@
 import * as THREE from 'three'
 import { SCENE_CONFIG } from './config'
-import { loadTextureCached } from './textures'
+import { makeDepthPhotoMesh } from './depthPhoto'
 
-// Экран = окно квартиры: фото вечернего города как задник + рама у плоскости экрана.
-// Рама — главный источник параллакса (город далеко, сдвигается слабо).
-// Задник — ОБЫЧНОЕ фото (не панорама), поэтому плоскость, а не сфера.
+// Экран = окно квартиры: фото вечернего города как 2.5D-задник + рама у плоскости
+// экрана. Параллакс двухслойный: рама (у стекла) против города (далеко), плюс
+// перила балкона с фото выдвигаются картой глубины — эффект настоящего балкона.
 export async function buildWindowScene(screenWcm: number, screenHcm: number): Promise<THREE.Scene> {
   const scene = new THREE.Scene()
 
-  const tex = await loadTextureCached(SCENE_CONFIG.cityViewUrl)
   // Размер задника: должен покрывать обзор через «окно» при крайних позициях головы.
-  // Глубина 180 см — компромисс: ближе = заметнее параллакс рамы, дальше = резче фото.
-  const BACKDROP_Z = -180
-  const BACKDROP_W = 400
-  const BACKDROP_H = BACKDROP_W * (981 / 736) // аспект фото
-  const backdrop = new THREE.Mesh(
-    new THREE.PlaneGeometry(BACKDROP_W, BACKDROP_H),
-    new THREE.MeshBasicMaterial({ map: tex })
-  )
-  // Центр чуть ниже уровня глаз: линия горизонта города ~ на уровне взгляда,
-  // балконные перила с фото остаются под нижней кромкой «окна».
-  backdrop.position.set(0, -40, BACKDROP_Z)
+  // Дальний план на -200 см, перила с карты глубины выходят на ~ -80 см.
+  const { url, depthUrl, aspect } = SCENE_CONFIG.cityView
+  const widthCm = 420
+  const backdrop = await makeDepthPhotoMesh({
+    photoUrl: url,
+    depthUrl,
+    widthCm,
+    heightCm: widthCm / aspect,
+    zCm: -200,
+    depthAmountCm: 120,
+    // Центр чуть ниже уровня глаз: линия горизонта города ~ на уровне взгляда,
+    // перила балкона — под нижней кромкой «окна»
+    yCm: -40,
+  })
   scene.add(backdrop)
 
   // Рама окна сразу за плоскостью экрана, размер из калибровки

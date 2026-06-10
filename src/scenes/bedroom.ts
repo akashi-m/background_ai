@@ -131,7 +131,7 @@ export async function buildBedroom(scene: THREE.Scene): Promise<void> {
   scene.add(rug)
 
   // --- Окно на задней стене: фото города + шторы ---
-  const cityTex = await loadTextureCached(SCENE_CONFIG.cityViewUrl)
+  const cityTex = await loadTextureCached(SCENE_CONFIG.cityView.url)
   const view = new THREE.Mesh(
     new THREE.PlaneGeometry(120, 160), // аспект фото 736×981 = 0.75
     new THREE.MeshBasicMaterial({ map: cityTex })

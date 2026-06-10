@@ -30,11 +30,13 @@ export async function buildWorld(
   dolly.add(root)
 
   // Незакоммиченное выравнивание из localStorage перекрывает meta.json
-  const override = loadAlignOverride(baseUrl.split('/').filter(Boolean).pop()!)
+  const name = baseUrl.split('/').filter(Boolean).pop()!
+  const override = loadAlignOverride(name)
   if (override) {
     root.position.set(...override.position)
     root.rotation.y = (override.rotationYDeg * Math.PI) / 180
     root.scale.setScalar(override.scale)
+    console.info(`мир «${name}»: применено выравнивание из localStorage — meta.json игнорируется (очистить: localStorage.removeItem('stellar-mirror.align.${name}'))`)
   }
 
   if (meta.format === 'splat') {

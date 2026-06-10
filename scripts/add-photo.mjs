@@ -4,7 +4,7 @@
 //   node scripts/add-photo.mjs ~/Downloads/living.png living
 // Скрипт: создаёт папку worlds/<имя>/, копирует фото как photo<ext>,
 // генерирует карту глубины depth.png и записывает meta.json.
-import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { extname, resolve } from 'node:path'
 
@@ -40,16 +40,24 @@ const w = Number(sipsOut.match(/pixelWidth:\s*(\d+)/)?.[1])
 const h = Number(sipsOut.match(/pixelHeight:\s*(\d+)/)?.[1])
 const aspect = w && h ? Math.round((w / h) * 10000) / 10000 : null
 
-// Записываем meta.json
+// Записываем meta.json. Если мир уже существует — бережно обновляем только
+// файлы/aspect, сохраняя настройки оператора (title, dollyMaxCm, depthAmountCm, transform).
+let existing = {}
+const metaPath = `${worldDir}/meta.json`
+if (existsSync(metaPath)) {
+  try { existing = JSON.parse(readFileSync(metaPath, 'utf8')) } catch { /* битый — перезапишем */ }
+  console.log('мир уже существует — обновляю фото, настройки сохраняю')
+}
 const meta = {
   title: name,
+  dollyMaxCm: 25,
+  ...existing,
   format: 'photo25d',
   file: photoFile,
   depthFile,
   aspect,
-  dollyMaxCm: 25,
   source: 'add-photo.mjs',
 }
-writeFileSync(`${worldDir}/meta.json`, JSON.stringify(meta, null, 2) + '\n')
+writeFileSync(metaPath, JSON.stringify(meta, null, 2) + '\n')
 
 console.log(`\nготово: ${worldDir}/ — добавь '${name}' в worlds в src/scenes/config.ts`)

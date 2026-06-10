@@ -12,7 +12,7 @@
   скажи Claude, он обрежет край при подключении.
 - Не апскейль ничего сторонними тулами — кладём оригинал как есть.
 
-## 1. Интерьер (режим «Комната», клавиша M)
+## 1. Интерьер (спальня, мир bedroom)
 
 Загрузи референс комнаты (фото/рендер от застройщика) и отправь:
 
@@ -30,7 +30,7 @@ highest resolution available, landscape orientation 3:2.
 - «step back, show more of the room»
 - «make the lighting warmer / more evening mood»
 
-## 2. Вид из окна / балкона (режим «Балкон», клавиша W)
+## 2. Вид из окна / балкона (мир balcony)
 
 Загрузи фото вида (или опиши локацию) и отправь:
 
@@ -51,17 +51,18 @@ Generate at the highest resolution available.
 node scripts/add-photo.mjs ~/Downloads/живущая.png living
 ```
 
-Скрипт сам: положит фото в `public/assets/`, сгенерирует карту глубины,
-напечатает готовую строку — вставь её в `src/scenes/config.ts`
-(`photoRoom:` для комнаты, `cityView:` для вида) и обнови страницу.
+Скрипт сам: положит фото в `public/assets/worlds/living/`, сгенерирует карту глубины
+и создаст `meta.json` — добавь `'living'` в список worlds в `src/scenes/config.ts`
+и обнови страницу.
 
 ## 4. Тонкая настройка ощущения (по желанию)
 
 | Ручка | Где | Что делает |
 |---|---|---|
-| `depthAmountCm` | `mirrorScene.ts` (28), `windowScene.ts` (40) | сила объёма: больше = драматичнее, но тянет края объектов |
-| `parallaxGain` | `main.ts` (мин. 0.25) | отклик на движение головы; на проде с экраном 120 см станет 1:1 сам |
-| `overscan` | вызовы `fitCoverCm` | запас кадра по краям под параллакс |
+| `depthAmountCm` | `src/scenes/worldScene.ts` (28 для photo25d) | сила объёма 2.5D-фото: больше = драматичнее, но тянет края объектов |
+| `dollyMaxCm` | `meta.json` мира | глубина «въезда» при подходе к экрану |
+| `parallaxGain` | `src/main.ts` (мин. 0.25) | отклик на движение головы; на проде с экраном 120 см станет 1:1 сам |
+| `overscan` | вызов `fitCoverCm` в `worldScene.ts` | запас кадра по краям под параллакс |
 
 ## 5. Миры-сплаты (максимальное качество, Stellar Window 2.0)
 

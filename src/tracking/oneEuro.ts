@@ -17,10 +17,16 @@ export class OneEuroFilter {
   }
 
   filter(x: number, dt: number): number {
+    // Нефинитный x не сохраняем: возвращаем последнее корректное значение (или сам x при первом вызове)
+    if (!Number.isFinite(x)) return this.xPrev ?? x
     if (this.xPrev === null) {
       this.xPrev = x
       return x
     }
+    // dt <= 0 или NaN делает dx бесконечным/NaN — отбрасываем кадр, возвращаем последнее значение
+    if (!(dt > 0)) return this.xPrev
+    // Производная вычисляется от предыдущего *фильтрованного* значения (намеренное отличие от эталонной
+    // реализации: чуть более отзывчиво при отставании)
     const dx = (x - this.xPrev) / dt
     const aD = this.alpha(this.cfg.dCutoff, dt)
     this.dxPrev = aD * dx + (1 - aD) * this.dxPrev

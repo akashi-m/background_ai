@@ -9,7 +9,7 @@ const image = flag('image')
 const name = flag('name')
 const prompt = flag('prompt', 'photorealistic interior, keep the scene exactly as in the image')
 if (!image || !name || !existsSync(image)) {
-  console.error('usage: node scripts/gen-world.mjs --image <фото> --name <имя> [--prompt "..."]')
+  console.error('usage: node scripts/gen-world.mjs --image <фото .png|.jpg> --name <имя> [--prompt "..."]')
   process.exit(1)
 }
 
@@ -52,6 +52,7 @@ const op = await api('POST', '/marble/v1/worlds:generate', {
   },
 })
 const opId = op.operation_id ?? op.name ?? op.id
+if (!opId) throw new Error('Не нашёл operation_id/name в ответе worlds:generate:\n' + JSON.stringify(op, null, 2).slice(0, 2000))
 console.log('   operation:', opId)
 
 // 3. Поллинг
@@ -59,7 +60,7 @@ let world = null
 for (let i = 0; i < 120; i++) {
   await new Promise((r) => setTimeout(r, 10_000))
   const st = await api('GET', `/marble/v1/operations/${encodeURIComponent(opId)}`)
-  process.stdout.write(`   ...${i * 10}с done=${st.done}\r`)
+  process.stdout.write(`   ...${(i + 1) * 10}с done=${st.done}\r`)
   if (st.error) throw new Error('Генерация упала: ' + JSON.stringify(st.error))
   if (st.done) { world = st.response; break }
 }

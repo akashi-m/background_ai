@@ -40,8 +40,11 @@ for (const ref of refs) {
   parts.push({ inline_data: { mime_type: mime, data: readFileSync(ref).toString('base64') } })
 }
 
-// GA-имя модели; если у ключа доступен только preview — переименуется автоматически
-const MODELS = ['gemini-3-pro-image', 'gemini-3-pro-image-preview']
+// Порядок: Pro (платный тир) → Nano Banana 2 (4K, flash) → Nano Banana 1 (до 2K).
+// Можно явно задать: --model <имя>
+const MODELS = flag('model')
+  ? [flag('model')]
+  : ['gemini-3-pro-image', 'gemini-3.1-flash-image-preview', 'gemini-2.5-flash-image']
 
 async function generate(model) {
   const res = await fetch(

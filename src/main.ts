@@ -27,7 +27,7 @@ async function start() {
   addEventListener('resize', () => renderer.setSize(innerWidth, innerHeight))
 
   const mirrorScene = await buildMirrorScene()
-  const windowScene = await buildWindowScene(calibration.screenWcm, calibration.screenHcm)
+  const windowScene = await buildWindowScene()
   const modes = new ModeMachine()
 
   addEventListener('keydown', (e) => {
@@ -37,7 +37,6 @@ async function start() {
   })
 
   // Геометрия оконного фрейма (windowScene) строится один раз при старте; изменения
-  // screenWcm/screenHcm вступят в силу только после перезагрузки страницы (ограничение прототипа).
   const debug = new DebugPanel(calibration, () => { /* размеры экрана подхватятся в следующем кадре */ })
 
   // возраст последнего кадра камеры — грубая оценка вклада камеры в задержку

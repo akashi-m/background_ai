@@ -1,0 +1,9 @@
+{
+  "title": "Балкон",
+  "format": "photo25d",
+  "file": "photo.png",
+  "depthFile": "depth.png",
+  "aspect": 2.357,
+  "dollyMaxCm": 20,
+  "source": "gemini nano banana, референс заказчика"
+}

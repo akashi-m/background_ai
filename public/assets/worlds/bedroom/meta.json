@@ -1,0 +1,9 @@
+{
+  "title": "Спальня",
+  "format": "photo25d",
+  "file": "photo.png",
+  "depthFile": "depth.png",
+  "aspect": 1.0665,
+  "dollyMaxCm": 25,
+  "source": "gemini nano banana, референс заказчика"
+}

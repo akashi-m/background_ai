@@ -62,3 +62,17 @@ node scripts/add-photo.mjs ~/Downloads/живущая.png living
 | `depthAmountCm` | `mirrorScene.ts` (28), `windowScene.ts` (40) | сила объёма: больше = драматичнее, но тянет края объектов |
 | `parallaxGain` | `main.ts` (мин. 0.25) | отклик на движение головы; на проде с экраном 120 см станет 1:1 сам |
 | `overscan` | вызовы `fitCoverCm` | запас кадра по краям под параллакс |
+
+## 5. Миры-сплаты (максимальное качество, Stellar Window 2.0)
+
+Полноценный 3D-мир из одной картинки (Marble World API, ключ WORLDLABS_API_KEY в .env,
+платный план для экспорта):
+
+    node scripts/gen-world.mjs --image фото.png --name living
+
+~5 минут генерации → папка public/assets/worlds/living/ готова. Дальше:
+1. Добавь 'living' в worlds в src/scenes/config.ts
+2. Запусти приложение, переключись на мир, нажми `A` — выровняй стрелками
+   (масштаб: - =, поворот: [ ]), transform скопируй из консоли в meta.json
+3. Если позже появится съёмка реальной квартиры — Postshot/Luma → world.spz
+   в ту же папку, код не меняется

@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark'
 import type { WorldMeta } from '../app/worldMeta'
 import { makeDepthPhotoMesh, fitCoverCm } from './depthPhoto'
+import { loadAlignOverride } from '../debug/align'
 
 // Мир, собранный из папки worlds/<имя>/.
 // scene → dolly (анимируется въездом) → root (выравнивание из meta.transform).
@@ -27,6 +28,14 @@ export async function buildWorld(
   root.rotation.y = (meta.transform.rotationYDeg * Math.PI) / 180
   root.scale.setScalar(meta.transform.scale)
   dolly.add(root)
+
+  // Незакоммиченное выравнивание из localStorage перекрывает meta.json
+  const override = loadAlignOverride(baseUrl.split('/').filter(Boolean).pop()!)
+  if (override) {
+    root.position.set(...override.position)
+    root.rotation.y = (override.rotationYDeg * Math.PI) / 180
+    root.scale.setScalar(override.scale)
+  }
 
   if (meta.format === 'splat') {
     const url = baseUrl + meta.file

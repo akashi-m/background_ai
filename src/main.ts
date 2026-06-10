@@ -9,6 +9,7 @@ import { parseWorldMeta } from './app/worldMeta'
 import { buildWorld, type BuiltWorld } from './scenes/worldScene'
 import { dollyFromEyeZ } from './app/dolly'
 import { DebugPanel } from './debug/panel'
+import { AlignController } from './debug/align'
 import { SCENE_CONFIG } from './scenes/config'
 
 async function fetchJson(url: string): Promise<unknown> {
@@ -40,6 +41,11 @@ async function start() {
     }),
   )
   const switcher = new WorldSwitcher(worlds.length)
+
+  new AlignController(
+    () => worlds[switcher.index],
+    () => SCENE_CONFIG.worlds[switcher.index],
+  )
 
   addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLInputElement) return

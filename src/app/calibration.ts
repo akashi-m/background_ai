@@ -29,9 +29,11 @@ export function loadCalibration(storage: ReadStore = localStorage): Calibration 
       return { ...DEFAULT_CALIBRATION }
     }
     const merged = { ...DEFAULT_CALIBRATION, ...parsed }
-    // Нечисловые/нефинитные значения полей откатываются к дефолтам
+    const POSITIVE = new Set<keyof Calibration>(['screenWcm', 'screenHcm', 'webcamHfovDeg'])
+    // Нечисловые/нефинитные значения полей откатываются к дефолтам;
+    // поля, обязанные быть строго положительными, дополнительно проверяются на > 0.
     for (const k of Object.keys(DEFAULT_CALIBRATION) as (keyof Calibration)[]) {
-      if (typeof merged[k] !== 'number' || !isFinite(merged[k])) merged[k] = DEFAULT_CALIBRATION[k]
+      if (typeof merged[k] !== 'number' || !isFinite(merged[k]) || (POSITIVE.has(k) && merged[k] <= 0)) merged[k] = DEFAULT_CALIBRATION[k]
     }
     return merged as Calibration
   } catch {

@@ -31,10 +31,13 @@ async function start() {
   const modes = new ModeMachine()
 
   addEventListener('keydown', (e) => {
+    if (e.target instanceof HTMLInputElement) return
     if (e.code === 'KeyM') modes.switchTo('MIRROR')
     if (e.code === 'KeyW') modes.switchTo('WINDOW')
   })
 
+  // Геометрия оконного фрейма (windowScene) строится один раз при старте; изменения
+  // screenWcm/screenHcm вступят в силу только после перезагрузки страницы (ограничение прототипа).
   const debug = new DebugPanel(calibration, () => { /* размеры экрана подхватятся в следующем кадре */ })
 
   // возраст последнего кадра камеры — грубая оценка вклада камеры в задержку

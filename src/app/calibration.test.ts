@@ -44,4 +44,9 @@ describe('calibration', () => {
     const s = fakeStorage({ 'stellar-mirror.calibration': '[1,2,3]' })
     expect(loadCalibration(s)).toEqual(DEFAULT_CALIBRATION)
   })
+
+  it('нулевая ширина экрана → дефолт (защита от деградации проекции)', () => {
+    const s = fakeStorage({ 'stellar-mirror.calibration': '{"screenWcm": 0}' })
+    expect(loadCalibration(s).screenWcm).toBe(DEFAULT_CALIBRATION.screenWcm)
+  })
 })

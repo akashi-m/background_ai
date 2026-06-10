@@ -22,6 +22,7 @@ export class DebugPanel {
     document.body.appendChild(this.form)
 
     addEventListener('keydown', (e) => {
+      if (e.target instanceof HTMLInputElement) return
       if (e.code === 'KeyD') this.stats.style.display = this.stats.style.display === 'none' ? 'block' : 'none'
       if (e.code === 'KeyC') this.form.style.display = this.form.style.display === 'none' ? 'block' : 'none'
     })
@@ -46,7 +47,13 @@ export class DebugPanel {
       input.value = String(this.calibration[key])
       input.style.width = '70px'
       input.onchange = () => {
-        this.calibration[key] = Number(input.value)
+        const v = Number(input.value)
+        const mustBePositive = key === 'screenWcm' || key === 'screenHcm' || key === 'webcamHfovDeg'
+        if (!Number.isFinite(v) || (mustBePositive && v <= 0)) {
+          input.value = String(this.calibration[key]) // откат: пустое/мусорное значение не коммитим
+          return
+        }
+        this.calibration[key] = v
         saveCalibration(this.calibration)
         this.onCalibrationChange()
       }

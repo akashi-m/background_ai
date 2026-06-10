@@ -34,21 +34,26 @@ export class PersonSegmenter {
     this.segmenter.segmentForVideo(this.video, nowMs, (result) => {
       const mask = result.confidenceMasks?.[0]
       if (!mask) return
-      const data = mask.getAsFloat32Array()
-      if (!this.texture || this.texture.image.width !== mask.width) {
+      // PERF: 8 бит хватает для smoothstep-краёв; линейная фильтрация байтовых текстур —
+      // core WebGL2 (float32 требует OES_texture_float_linear); GPU→CPU readback и мусор
+      // в 4 раза меньше.
+      // PERF: для продакшна — оставить маску на GPU (canvas MPMask → texImage2D)
+      const data = mask.getAsUint8Array()
+      if (!this.texture || this.texture.image.width !== mask.width || this.texture.image.height !== mask.height) {
         this.texture?.dispose()
         this.texture = new THREE.DataTexture(
-          new Float32Array(data.length), mask.width, mask.height,
-          THREE.RedFormat, THREE.FloatType
+          data.slice(), mask.width, mask.height,
+          THREE.RedFormat, THREE.UnsignedByteType
         )
         this.texture.minFilter = THREE.LinearFilter
         this.texture.magFilter = THREE.LinearFilter
       }
-      ;(this.texture.image.data as unknown as Float32Array).set(data)
+      ;(this.texture.image.data as Uint8Array).set(data)
       this.texture.needsUpdate = true
       mask.close()
 
       this.frames++
+      if (this.fpsWindowStart === 0) this.fpsWindowStart = nowMs
       if (nowMs - this.fpsWindowStart > 1000) {
         this.fps = this.frames
         this.frames = 0

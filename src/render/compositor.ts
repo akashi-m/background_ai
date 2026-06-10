@@ -10,7 +10,8 @@ export class Compositor {
 
   constructor(video: HTMLVideoElement) {
     const videoTex = new THREE.VideoTexture(video)
-    videoTex.colorSpace = THREE.SRGBColorSpace
+    // НЕ задаём colorSpace: ShaderMaterial пишет в буфер как есть, и «сырой» sRGB
+    // с камеры — ровно то, что должно попасть на экран (зеркало показывает камеру 1:1)
 
     this.personMat = new THREE.ShaderMaterial({
       transparent: true,
@@ -38,6 +39,7 @@ export class Compositor {
         }
       `,
     })
+    // TODO(прод): cover-fit UV — окно браузера ≠ аспект камеры, фигура слегка растягивается
     const person = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.personMat)
     person.renderOrder = 0
     this.scene.add(person)

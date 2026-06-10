@@ -43,8 +43,11 @@ export class HeadTracker {
       const res = this.landmarker.detectForVideo(this.video, nowMs)
       const face = this.pickNearestFace(res.faceLandmarks)
       if (face) {
-        this.target = eyePositionCm(face, this.calibration)
-        this.lastSeenMs = nowMs
+        const t = eyePositionCm(face, this.calibration)
+        if (Number.isFinite(t.x) && Number.isFinite(t.y) && Number.isFinite(t.z)) {
+          this.target = t
+          this.lastSeenMs = nowMs
+        }
       }
     }
 

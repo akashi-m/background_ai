@@ -9,9 +9,11 @@ export function loadTextureCached(url: string): Promise<THREE.Texture> {
     p = new THREE.TextureLoader().loadAsync(url).then((t) => {
       t.colorSpace = THREE.SRGBColorSpace
       return t
+    }).catch(() => {
+      cache.delete(url)
+      throw new Error('Не загрузился ассет: ' + url)
     })
     cache.set(url, p)
-    p.catch(() => cache.delete(url))
   }
   return p
 }

@@ -62,6 +62,9 @@ async function start() {
     applyOffAxis(camera, safeEye, innerWidth * cmPerPx, innerHeight * cmPerPx)
     const scene = modes.mode === 'MIRROR' ? mirrorScene : windowScene
     renderer.render(scene, camera)
+    // ЗАМЕТКА (fps): детекция лица и сегментация гейтятся одним и тем же новым кадром
+    // камеры — раз в ~33 мс один тик rAF несёт обе ML-инференции + рендер.
+    // Если ручной тест покажет провалы fps — разнести их по чётным/нечётным кадрам.
     segmenter.update(now)
     const personOpacity = modes.mode === 'MIRROR' ? 1 : 0
     compositor.render(renderer, segmenter.texture, personOpacity, modes.fade)

@@ -11,10 +11,10 @@ from capture.server import PipelineLike
 class SbsTrack(VideoStreamTrack):
     """Отдаёт последний SBS-кадр пайплайна; нет кадра — чёрный (рендерер в IDLE)."""
 
-    def __init__(self, pipeline: PipelineLike, fps: int = 30) -> None:
+    def __init__(self, pipeline: PipelineLike) -> None:
+        # Темп задаёт aiortc (VIDEO_PTIME = 1/30); прод-60 fps — подпроект Ops
         super().__init__()
         self._pipeline = pipeline
-        self._fps = fps
         self._black = np.zeros((720, 2560, 3), dtype=np.uint8)
 
     async def recv(self) -> VideoFrame:

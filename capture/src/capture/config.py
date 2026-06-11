@@ -13,7 +13,6 @@ class CaptureConfig(BaseModel):
     engine: Literal["mediapipe", "rvm"] = "mediapipe"
     width: int = 1280
     height: int = 720
-    fps: int = 30
     port: int = 8765             # aiohttp: /offer /ws /viewer /health
     models_dir: str = "models"   # куда скачаны модели (scripts/get-models.sh)
 
@@ -26,7 +25,6 @@ def parse_args(argv: list[str] | None = None) -> CaptureConfig:
     p.add_argument("--camera-index", type=int, default=0)
     p.add_argument("--width", type=int, default=1280)
     p.add_argument("--height", type=int, default=720)
-    p.add_argument("--fps", type=int, default=30)
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("--models-dir", default="models")
     a = p.parse_args(argv)
@@ -41,6 +39,6 @@ def parse_args(argv: list[str] | None = None) -> CaptureConfig:
 
     return CaptureConfig(
         source=source, file_path=file_path, camera_index=a.camera_index,
-        engine=a.engine, width=a.width, height=a.height, fps=a.fps,
+        engine=a.engine, width=a.width, height=a.height,
         port=a.port, models_dir=a.models_dir,
     )

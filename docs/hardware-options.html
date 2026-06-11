@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stellar Window — выбор железа</title>
+<style>
+  :root {
+    --bg: #0d1017; --card: #161b26; --card2: #1c2333; --line: #2a3347;
+    --text: #e8ebf2; --dim: #8b93a7; --accent: #6ea8ff; --gold: #ffd27a;
+    --green: #6fd394; --red: #ff8d7a;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--text); font: 15px/1.55 system-ui, -apple-system, sans-serif; padding: 32px 20px 120px; }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  h1 { font-size: 26px; margin-bottom: 4px; }
+  h1 span { color: var(--gold); }
+  .sub { color: var(--dim); margin-bottom: 28px; }
+  h2 { font-size: 19px; margin: 34px 0 6px; }
+  .hint { color: var(--dim); font-size: 13px; margin-bottom: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+  .card {
+    background: var(--card); border: 2px solid var(--line); border-radius: 14px;
+    padding: 16px; cursor: pointer; transition: border-color .15s, transform .1s; position: relative;
+  }
+  .card:hover { border-color: #3d4d6e; transform: translateY(-2px); }
+  .card.sel { border-color: var(--accent); background: var(--card2); }
+  .card.sel::after { content: '✓ выбрано'; position: absolute; top: 12px; right: 14px; color: var(--accent); font-size: 12px; font-weight: 700; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 700; color: #1b2030; background: var(--gold); border-radius: 20px; padding: 2px 10px; margin-bottom: 8px; }
+  .badge.warn { background: var(--red); color: #2a1410; }
+  .pic { height: 130px; display: flex; align-items: center; justify-content: center; margin-bottom: 10px; }
+  .card h3 { font-size: 16px; margin-bottom: 2px; }
+  .price { color: var(--gold); font-weight: 700; font-size: 17px; margin: 4px 0 8px; }
+  .specs { color: var(--dim); font-size: 13px; margin-bottom: 8px; }
+  ul { list-style: none; font-size: 13px; }
+  li { padding-left: 18px; position: relative; margin: 3px 0; }
+  li.p::before { content: '+'; position: absolute; left: 4px; color: var(--green); font-weight: 700; }
+  li.m::before { content: '−'; position: absolute; left: 4px; color: var(--red); font-weight: 700; }
+  .extras .card { display: flex; align-items: center; gap: 12px; padding: 12px 16px; }
+  .extras .pic { height: auto; margin: 0; }
+  .extras h3 { font-size: 14px; }
+  .extras .price { font-size: 14px; margin: 0; }
+  .total {
+    position: fixed; bottom: 0; left: 0; right: 0; background: #10141de8; backdrop-filter: blur(10px);
+    border-top: 1px solid var(--line); padding: 14px 20px;
+  }
+  .total .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .sum { font-size: 22px; font-weight: 800; color: var(--gold); }
+  .picked { color: var(--dim); font-size: 13px; flex: 1; min-width: 200px; }
+  button {
+    background: var(--accent); color: #0d1017; border: 0; border-radius: 10px;
+    padding: 10px 18px; font-weight: 700; font-size: 14px; cursor: pointer;
+  }
+  button:hover { filter: brightness(1.1); }
+  svg { width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>⭐ Stellar Window — <span>выбор железа</span></h1>
+  <p class="sub">Инсталляция для City Mall Tashkent: экран 1,2–1,5 × 1,8–2,0 м вертикально, 4K, тач, работа 12 ч/день. Кликай по карточкам — итог считается внизу. Цены ориентировочные (июнь 2026), без доставки в Ташкент.</p>
+
+  <h2>1. Экран + тач</h2>
+  <p class="hint">86" в портрете ≈ 1,07 × 1,90 м — попадание в ТЗ. Главный выбор: готовый тотем с корпусом или брендовая панель + своя конструкция.</p>
+  <div class="grid" data-group="screen">
+    <div class="card sel" data-price="4500" data-name="Тач-тотем 86&quot; OEM">
+      <span class="badge">рекомендация</span>
+      <div class="pic"><svg viewBox="0 0 200 130"><rect x="75" y="6" width="50" height="106" rx="6" fill="#222a3c" stroke="#6ea8ff" stroke-width="2"/><rect x="80" y="14" width="40" height="84" rx="2" fill="#2c3a52"/><rect x="84" y="20" width="14" height="20" fill="#ffe9b8" opacity=".8"/><rect x="98" y="60" width="18" height="12" rx="2" fill="#5d7396"/><circle cx="100" cy="10" r="2.5" fill="#7fd4ff"/><rect x="65" y="112" width="70" height="8" rx="3" fill="#222a3c"/><text x="100" y="128" text-anchor="middle" font-size="9" fill="#8b93a7">готовый корпус + камера сверху</text></svg></div>
+      <h3>Тач-тотем 85–86" (OEM, под заказ)</h3>
+      <div class="price">$3 000 – 6 000</div>
+      <div class="specs">4K · PCAP-тач · 700+ нит · 24/7 · нативный портрет · отсек под ПК</div>
+      <ul>
+        <li class="p">Корпус уже есть — экономим всю кастомную конструкцию</li>
+        <li class="p">Сразу для ТЦ: яркость, вентиляция, антивандальное стекло</li>
+        <li class="p">Закажем вырез под камеру и брендирование Stellar</li>
+        <li class="m">Срок производства + доставка из Китая ~4–6 недель</li>
+      </ul>
+    </div>
+    <div class="card" data-price="4000" data-name="Samsung WA86C">
+      <div class="pic"><svg viewBox="0 0 200 130"><rect x="40" y="20" width="120" height="74" rx="4" fill="#222a3c" stroke="#3d4d6e" stroke-width="2"/><rect x="46" y="26" width="108" height="62" fill="#2c3a52"/><rect x="54" y="34" width="30" height="22" fill="#ffe9b8" opacity=".8"/><rect x="110" y="60" width="34" height="16" rx="2" fill="#5d7396"/><text x="100" y="112" text-anchor="middle" font-size="9" fill="#8b93a7">панель → портрет → свой корпус</text></svg></div>
+      <h3>Samsung Interactive WA86C 86"</h3>
+      <div class="price">$3 500 – 4 500</div>
+      <div class="specs">4K · тач · бренд · гарантия у дистрибьютора</div>
+      <ul>
+        <li class="p">Брендовое качество панели и тача</li>
+        <li class="p">Локальная гарантия Samsung</li>
+        <li class="m">Это «школьная доска»: портретный монтаж — проверять у дистрибьютора!</li>
+        <li class="m">Корпус-конструкцию строим сами (+$2–4k к смете)</li>
+      </ul>
+    </div>
+    <div class="card" data-price="4500" data-name="LG CreateBoard 86TR3DJ">
+      <div class="pic"><svg viewBox="0 0 200 130"><rect x="40" y="20" width="120" height="74" rx="4" fill="#222a3c" stroke="#3d4d6e" stroke-width="2"/><rect x="46" y="26" width="108" height="62" fill="#2c3a52"/><rect x="60" y="36" width="40" height="26" rx="2" fill="#3a4a66"/><circle cx="130" cy="55" r="14" fill="#ffe28a" opacity=".7"/><text x="100" y="112" text-anchor="middle" font-size="9" fill="#8b93a7">панель → портрет → свой корпус</text></svg></div>
+      <h3>LG CreateBoard 86TR3DJ 86"</h3>
+      <div class="price">$4 000 – 5 000</div>
+      <div class="specs">4K · IR-тач · бренд</div>
+      <ul>
+        <li class="p">Надёжная серия для бизнеса</li>
+        <li class="m">Портрет официально не поддерживается — риск гарантии</li>
+        <li class="m">Корпус сами (+$2–4k)</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>2. Камера трекинга</h2>
+  <p class="hint">Требования нашего софта: фиксированный объектив (никаких PTZ-гимбалов!), 1080p60+, широкий угол, хорошая чувствительность под свет ТЦ.</p>
+  <div class="grid" data-group="camera">
+    <div class="card sel" data-price="200" data-name="Elgato Facecam 4K">
+      <span class="badge">рекомендация</span>
+      <div class="pic"><svg viewBox="0 0 200 130"><rect x="62" y="38" width="76" height="44" rx="10" fill="#222a3c" stroke="#6ea8ff" stroke-width="2"/><circle cx="100" cy="60" r="16" fill="#2c3a52" stroke="#3d4d6e" stroke-width="2"/><circle cx="100" cy="60" r="8" fill="#0d1017"/><circle cx="96" cy="56" r="2.5" fill="#7fd4ff"/><rect x="92" y="86" width="16" height="14" rx="3" fill="#222a3c"/><text x="100" y="118" text-anchor="middle" font-size="9" fill="#8b93a7">фиксированный объектив, 4K60</text></svg></div>
+      <h3>Elgato Facecam 4K</h3>
+      <div class="price">~$200</div>
+      <div class="specs">4K60 · несжатый поток · минимальная задержка · ручная фиксация экспозиции</div>
+      <ul>
+        <li class="p">Создана для стриминга: latency лучшая в классе</li>
+        <li class="p">Нет моторов — калибровка не сбивается никогда</li>
+        <li class="p">Настройки хранятся в камере (киоск перезагрузился — всё на месте)</li>
+      </ul>
+    </div>
+    <div class="card" data-price="200" data-name="Logitech MX Brio">
+      <div class="pic"><svg viewBox="0 0 200 130"><rect x="58" y="40" width="84" height="40" rx="20" fill="#222a3c" stroke="#3d4d6e" stroke-width="2"/><circle cx="100" cy="60" r="15" fill="#2c3a52" stroke="#3d4d6e" stroke-width="2"/><circle cx="100" cy="60" r="7" fill="#0d1017"/><circle cx="97" cy="57" r="2" fill="#7fd4ff"/><rect x="92" y="84" width="16" height="14" rx="3" fill="#222a3c"/><text x="100" y="118" text-anchor="middle" font-size="9" fill="#8b93a7">проверенная рабочая лошадка</text></svg></div>
+      <h3>Logitech MX Brio</h3>
+      <div class="price">~$200</div>
+      <div class="specs">4K30 / 1080p60 · большой сенсор</div>
+      <ul>
+        <li class="p">Отличная картинка при слабом свете</li>
+        <li class="p">Легко купить где угодно</li>
+        <li class="m">Задержка чуть выше Elgato</li>
+      </ul>
+    </div>
+    <div class="card" data-price="200" data-name="Insta360 Link 2 (не рекоменд.)">
+      <span class="badge warn">не советуем</span>
+      <div class="pic"><svg viewBox="0 0 200 130"><rect x="84" y="70" width="32" height="26" rx="6" fill="#222a3c"/><circle cx="100" cy="52" r="20" fill="#2c3a52" stroke="#ff8d7a" stroke-width="2"/><circle cx="100" cy="52" r="9" fill="#0d1017"/><circle cx="96" cy="48" r="2.5" fill="#7fd4ff"/><path d="M70,52 q-8,0 -8,10" stroke="#ff8d7a" fill="none" stroke-width="2" stroke-dasharray="3 3"/><path d="M130,52 q8,0 8,10" stroke="#ff8d7a" fill="none" stroke-width="2" stroke-dasharray="3 3"/><text x="100" y="118" text-anchor="middle" font-size="9" fill="#8b93a7">гимбал крутится — это минус для нас</text></svg></div>
+      <h3>Insta360 Link 2</h3>
+      <div class="price">~$200</div>
+      <div class="specs">4K · PTZ-гимбал · AI-трекинг</div>
+      <ul>
+        <li class="p">Классная камера для звонков</li>
+        <li class="m">Гимбал двигает объектив — ломает нашу калибровку</li>
+        <li class="m">Моторы = лишняя точка отказа на 12 ч/день</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>3. Вычислительный блок</h2>
+  <p class="hint">Наш софт летает даже на ноутбуке M4 — RTX 5070 уже даёт трёхкратный запас на сплаты в 4K. 5080 — это «навсегда с запасом».</p>
+  <div class="grid" data-group="pc">
+    <div class="card sel" data-price="1800" data-name="SFF-сборка RTX 5070">
+      <span class="badge">рекомендация</span>
+      <div class="pic"><svg viewBox="0 0 200 130"><rect x="60" y="26" width="80" height="74" rx="8" fill="#222a3c" stroke="#6ea8ff" stroke-width="2"/><rect x="68" y="34" width="64" height="10" rx="3" fill="#2c3a52"/><circle cx="74" cy="39" r="2" fill="#6fd394"/><rect x="68" y="50" width="64" height="42" rx="3" fill="#1a2030"/><path d="M76,71 a12 12 0 1 1 24 0 a12 12 0 1 1 -24 0" fill="none" stroke="#3d4d6e" stroke-width="3"/><path d="M104,71 a12 12 0 1 1 24 0 a12 12 0 1 1 -24 0" fill="none" stroke="#3d4d6e" stroke-width="3"/><text x="100" y="118" text-anchor="middle" font-size="9" fill="#8b93a7">компакт, тихий, серви́сный</text></svg></div>
+      <h3>SFF-сборка: RTX 5070, 32 ГБ, 1 ТБ</h3>
+      <div class="price">$1 500 – 2 000</div>
+      <div class="specs">Win 11 Pro киоск-режим · влезает в тотем · легко чинится локально</div>
+      <ul>
+        <li class="p">Лучшее соотношение цена/запас мощности</li>
+        <li class="p">Любой сервис в Ташкенте соберёт и обслужит</li>
+        <li class="p">Запчасти стандартные</li>
+      </ul>
+    </div>
+    <div class="card" data-price="3200" data-name="ZOTAC MAGNUS One Ultra (RTX 5080)">
+      <div class="pic"><svg viewBox="0 0 200 130"><rect x="68" y="30" width="64" height="64" rx="8" fill="#222a3c" stroke="#3d4d6e" stroke-width="2"/><rect x="76" y="38" width="48" height="48" rx="4" fill="#1a2030"/><path d="M84,62 a16 16 0 1 1 32 0 a16 16 0 1 1 -32 0" fill="none" stroke="#3d4d6e" stroke-width="3"/><circle cx="100" cy="62" r="4" fill="#6ea8ff"/><text x="100" y="115" text-anchor="middle" font-size="9" fill="#8b93a7">11,5 л — самый компактный с 5080</text></svg></div>
+      <h3>ZOTAC MAGNUS One Ultra</h3>
+      <div class="price">~$3 000 – 3 500</div>
+      <div class="specs">RTX 5080 desktop · 11,5 л · Core Ultra 7</div>
+      <ul>
+        <li class="p">Максимум мощности в минимуме объёма</li>
+        <li class="p">Готовый продукт с гарантией</li>
+        <li class="m">Дороже; запчасти проприетарные</li>
+      </ul>
+    </div>
+    <div class="card" data-price="3500" data-name="NZXT H2 Mini (RTX 5080)">
+      <div class="pic"><svg viewBox="0 0 200 130"><rect x="70" y="24" width="60" height="76" rx="10" fill="#222a3c" stroke="#3d4d6e" stroke-width="2"/><rect x="78" y="32" width="44" height="60" rx="5" fill="#1a2030"/><circle cx="100" cy="62" r="17" fill="none" stroke="#3d4d6e" stroke-width="3"/><circle cx="100" cy="62" r="4" fill="#ffd27a"/><text x="100" y="115" text-anchor="middle" font-size="9" fill="#8b93a7">премиум-мини с десктопной 5080</text></svg></div>
+      <h3>NZXT H2 Mini</h3>
+      <div class="price">$3 499</div>
+      <div class="specs">RTX 5080 · Ryzen 9800X3D / Ultra 9 · 32 ГБ · 2 ТБ</div>
+      <ul>
+        <li class="p">Топ-комплектация из коробки, отличное охлаждение</li>
+        <li class="m">Самый дорогой; избыточен для нашей задачи</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>4. Обвязка</h2>
+  <p class="hint">Мелочи, без которых инсталляция встанет в первый месяц. Мульти-выбор.</p>
+  <div class="grid extras" data-group="extras" data-multi="1">
+    <div class="card sel" data-price="150" data-name="ИБП 1 кВт"><div class="pic" style="width:36px">🔋</div><div><h3>ИБП ~1 кВт</h3><div class="specs">просадки питания в ТЦ — норма жизни</div></div><div class="price" style="margin-left:auto">$150</div></div>
+    <div class="card sel" data-price="60" data-name="Кабели HDMI 2.1 + активный USB"><div class="pic" style="width:36px">🔌</div><div><h3>HDMI 2.1 + активный USB-удлинитель</h3><div class="specs">4K60 до экрана, камера без потерь</div></div><div class="price" style="margin-left:auto">$60</div></div>
+    <div class="card sel" data-price="120" data-name="LED-подсветка контура"><div class="pic" style="width:36px">💡</div><div><h3>LED-лента по контуру + контроллер</h3><div class="specs">требование ТЗ, «дополнительные эффекты»</div></div><div class="price" style="margin-left:auto">$120</div></div>
+    <div class="card" data-price="300" data-name="Запасная камера + SSD"><div class="pic" style="width:36px">🧰</div><div><h3>ЗИП: запасная камера + SSD</h3><div class="specs">12 ч/день без простоев — горячая замена</div></div><div class="price" style="margin-left:auto">$300</div></div>
+  </div>
+</div>
+
+<div class="total">
+  <div class="wrap">
+    <div>
+      <div class="sum" id="sum">$0</div>
+      <div style="color:var(--dim);font-size:12px">ориентировочно, без доставки и растаможки</div>
+    </div>
+    <div class="picked" id="picked"></div>
+    <button onclick="copyConfig()">📋 Скопировать конфигурацию</button>
+  </div>
+</div>
+
+<script>
+  function recalc() {
+    let sum = 0
+    const names = []
+    document.querySelectorAll('.card.sel').forEach((c) => {
+      sum += Number(c.dataset.price)
+      names.push(c.dataset.name + ' — $' + Number(c.dataset.price).toLocaleString('en-US'))
+    })
+    document.getElementById('sum').textContent = '≈ $' + sum.toLocaleString('en-US')
+    document.getElementById('picked').textContent = names.join('  ·  ')
+  }
+  document.querySelectorAll('[data-group]').forEach((group) => {
+    const multi = group.dataset.multi === '1'
+    group.querySelectorAll('.card').forEach((card) => {
+      card.addEventListener('click', () => {
+        if (multi) card.classList.toggle('sel')
+        else {
+          group.querySelectorAll('.card').forEach((c) => c.classList.remove('sel'))
+          card.classList.add('sel')
+        }
+        recalc()
+      })
+    })
+  })
+  function copyConfig() {
+    const lines = ['Stellar Window — конфигурация железа:']
+    document.querySelectorAll('.card.sel').forEach((c) => lines.push('• ' + c.dataset.name + ' — ~$' + Number(c.dataset.price).toLocaleString('en-US')))
+    lines.push('Итого: ' + document.getElementById('sum').textContent)
+    navigator.clipboard.writeText(lines.join('\n')).then(() => alert('Скопировано!'))
+  }
+  recalc()
+</script>
+</body>
+</html>

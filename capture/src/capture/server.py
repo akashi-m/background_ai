@@ -10,7 +10,7 @@ from aiohttp import WSMsgType, web
 
 from capture.pipeline import PipelineStats
 
-VIEWER_HTML = Path(__file__).resolve().parents[3] / "viewer" / "viewer.html"
+VIEWER_HTML = Path(__file__).resolve().parents[2] / "viewer" / "viewer.html"
 
 
 class PipelineLike(Protocol):

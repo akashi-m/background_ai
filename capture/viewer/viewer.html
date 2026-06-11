@@ -1,3 +1,96 @@
 <!DOCTYPE html>
-<html lang="ru"><head><meta charset="utf-8"><title>capture viewer</title></head>
-<body>заглушка — полная страница в Task 10</body></html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>capture viewer — проверка RGBA-потока</title>
+<style>
+  body { margin: 0; background: #111; color: #9f9; font: 13px monospace; }
+  #stats { position: fixed; top: 8px; left: 8px; background: rgba(0,0,0,.6); padding: 6px; white-space: pre; }
+  canvas { display: block; width: 100vw; height: 100vh; object-fit: contain; }
+</style>
+</head>
+<body>
+<div id="stats">подключение...</div>
+<canvas id="gl"></canvas>
+<video id="v" autoplay playsinline muted style="display:none"></video>
+<script>
+// Распаковка SBS в WebGL: слева RGB, справа альфа; композит поверх шахматки —
+// дыры в альфе видны сразу.
+const canvas = document.getElementById('gl')
+const video = document.getElementById('v')
+const stats = document.getElementById('stats')
+const gl = canvas.getContext('webgl2')
+
+const vs = `#version 300 es
+in vec2 p; out vec2 uv;
+void main(){ uv = p*0.5+0.5; uv.y = 1.0-uv.y; gl_Position = vec4(p,0,1); }`
+const fs = `#version 300 es
+precision highp float;
+uniform sampler2D tex; in vec2 uv; out vec4 o;
+void main(){
+  vec3 rgb = texture(tex, vec2(uv.x*0.5, uv.y)).rgb;
+  float a  = texture(tex, vec2(0.5+uv.x*0.5, uv.y)).r;
+  float ch = mod(floor(gl_FragCoord.x/16.0)+floor(gl_FragCoord.y/16.0), 2.0);
+  vec3 bg = mix(vec3(0.35), vec3(0.55), ch);
+  o = vec4(mix(bg, rgb, a), 1.0);
+}`
+function shader(type, src){ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) throw gl.getShaderInfoLog(s); return s }
+const prog = gl.createProgram()
+gl.attachShader(prog, shader(gl.VERTEX_SHADER, vs))
+gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, fs))
+gl.linkProgram(prog); gl.useProgram(prog)
+const buf = gl.createBuffer()
+gl.bindBuffer(gl.ARRAY_BUFFER, buf)
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW)
+const loc = gl.getAttribLocation(prog, 'p')
+gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0)
+const tex = gl.createTexture()
+gl.bindTexture(gl.TEXTURE_2D, tex)
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+
+let frames = 0, fps = 0, last = performance.now()
+function draw(){
+  if (video.readyState >= 2) {
+    canvas.width = video.videoWidth / 2; canvas.height = video.videoHeight
+    gl.viewport(0, 0, canvas.width, canvas.height)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, video)
+    gl.drawArrays(gl.TRIANGLES, 0, 3)
+    frames++
+    const now = performance.now()
+    if (now - last > 1000) { fps = frames; frames = 0; last = now }
+  }
+  requestAnimationFrame(draw)
+}
+
+let telemetry = {}
+async function start(){
+  const pc = new RTCPeerConnection()
+  pc.addTransceiver('video', { direction: 'recvonly' })
+  pc.ontrack = (e) => { video.srcObject = new MediaStream([e.track]) }
+  const offer = await pc.createOffer()
+  await pc.setLocalDescription(offer)
+  const resp = await fetch('/offer', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sdp: pc.localDescription.sdp, type: pc.localDescription.type }),
+  })
+  await pc.setRemoteDescription(await resp.json())
+
+  const ws = new WebSocket(`ws://${location.host}/ws`)
+  ws.onmessage = (e) => { telemetry = JSON.parse(e.data) }
+
+  setInterval(() => {
+    stats.textContent =
+      `viewer fps: ${fps}\n` +
+      `pipeline fps: ${telemetry.fps ?? '—'}\n` +
+      `присутствие: ${telemetry.present ? 'да' : 'нет'}  дистанция: ${telemetry.distanceCm ? Math.round(telemetry.distanceCm) + ' см' : '—'}\n` +
+      `покрытие: ${telemetry.coverage ?? '—'}  ошибки: ${telemetry.errors ?? 0}`
+  }, 250)
+  draw()
+}
+start().catch((e) => { stats.textContent = 'ошибка: ' + e })
+</script>
+</body>
+</html>

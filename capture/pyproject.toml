@@ -40,5 +40,8 @@ select = ["E", "F", "I", "UP", "B"]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[project.scripts]
+capture = "capture.main:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/capture"]

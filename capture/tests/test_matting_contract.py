@@ -49,3 +49,14 @@ def test_contract_stable_across_calls(engine: MattingEngine) -> None:
     a1 = engine.process(rgb)
     a2 = engine.process(rgb)
     assert a1.shape == a2.shape          # рекуррентное состояние не ломает форму
+
+
+def test_rvm_survives_resolution_change() -> None:
+    if "rvm" not in engines():
+        pytest.skip("нет модели rvm")
+    cfg = CaptureConfig(engine="rvm", models_dir=str(MODELS))
+    e = make_engine(cfg)
+    a1 = e.process(synthetic_frame(320, 240))
+    a2 = e.process(synthetic_frame(640, 480))  # раньше падало в ONNX Expand
+    assert a1.shape == (240, 320)
+    assert a2.shape == (480, 640)

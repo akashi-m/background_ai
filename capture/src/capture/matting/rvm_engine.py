@@ -9,15 +9,21 @@ import onnxruntime as ort
 
 class RvmEngine:
     def __init__(self, model_path: str, downsample_ratio: float = 0.25) -> None:
+        # CoreML на этой модели МЕДЛЕННЕЕ CPU (замер M4, 720p: 63 мс vs 53 мс —
+        # граф рвётся на 20 партиций). Порядок: CUDA (прод) → CPU.
         providers = [
-            p for p in ("CoreMLExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider")
+            p for p in ("CUDAExecutionProvider", "CPUExecutionProvider")
             if p in ort.get_available_providers()
         ]
         self._sess = ort.InferenceSession(model_path, providers=providers)
         self._ratio = np.array([downsample_ratio], dtype=np.float32)
         self._rec: list[np.ndarray] = [np.zeros((1, 1, 1, 1), dtype=np.float32)] * 4
+        self._shape: tuple[int, int] | None = None
 
     def process(self, rgb: np.ndarray) -> np.ndarray:
+        if rgb.shape[:2] != self._shape:
+            self._shape = (rgb.shape[0], rgb.shape[1])
+            self.reset()
         src = rgb.astype(np.float32) / 255.0
         src = src.transpose(2, 0, 1)[None]  # [1,3,H,W]
         fgr, pha, *rec = self._sess.run(

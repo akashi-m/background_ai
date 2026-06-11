@@ -10,8 +10,11 @@ def pack_sbs(rgb: np.ndarray, alpha: np.ndarray) -> np.ndarray:
     h, w, _ = rgb.shape
     out = np.empty((h, w * 2, 3), dtype=np.uint8)
     out[:, :w] = rgb
-    a8 = np.clip(alpha * 255.0 + 0.5, 0, 255).astype(np.uint8)
-    out[:, w:] = a8[:, :, None]
+    a8 = (alpha * 255.0 + 0.5).clip(0, 255).astype(np.uint8)
+    right = out[:, w:]
+    right[:, :, 0] = a8
+    right[:, :, 1] = a8
+    right[:, :, 2] = a8
     return out
 
 

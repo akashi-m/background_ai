@@ -73,11 +73,30 @@ async def _viewer(request: web.Request) -> web.Response:
     return web.Response(text=VIEWER_HTML.read_text(), content_type="text/html")
 
 
+async def _offer(request: web.Request) -> web.Response:
+    from capture.webrtc import handle_offer
+
+    pipeline: PipelineLike = request.app["pipeline"]
+    pcs = request.app["pcs"]
+    body = await request.json()
+    local = await handle_offer(pipeline, body["sdp"], body["type"], pcs)
+    return web.json_response({"sdp": local.sdp, "type": local.type})
+
+
+async def _on_shutdown(app: web.Application) -> None:
+    for pc in set(app["pcs"]):
+        await pc.close()
+    app["pcs"].clear()
+
+
 def build_app(pipeline: PipelineLike, telemetry_hz: int = 15) -> web.Application:
     app = web.Application()
     app["pipeline"] = pipeline
     app["telemetry_hz"] = telemetry_hz
+    app["pcs"] = set()
     app.router.add_get("/health", _health)
     app.router.add_get("/ws", _ws)
     app.router.add_get("/viewer", _viewer)
+    app.router.add_post("/offer", _offer)
+    app.on_shutdown.append(_on_shutdown)
     return app

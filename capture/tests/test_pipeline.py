@@ -54,3 +54,37 @@ def test_pipeline_stop_is_idempotent(tmp_path: Path) -> None:
     p.start()
     p.stop()
     p.stop()  # повторный stop не падает
+
+
+class FlakyEngine:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def process(self, rgb: np.ndarray) -> np.ndarray:
+        self.calls += 1
+        if self.calls % 2 == 0:
+            raise RuntimeError("boom")
+        return (rgb[:, :, 0] > 128).astype(np.float32)
+
+
+def test_pipeline_survives_engine_errors(tmp_path: Path) -> None:
+    clip = tmp_path / "flaky.mp4"
+    make_clip(clip, frames=60)
+    from capture.sources.file import FileSource
+
+    p = Pipeline(FileSource(str(clip)), FlakyEngine(), PresenceConfig())
+    p.start()
+    try:
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            s = p.stats()
+            if s.errors > 0 and s.frames > 1:
+                break
+            time.sleep(0.01)
+        s = p.stats()
+        assert s.errors > 0                      # ошибка видима
+        assert s.last_error is not None and "boom" in s.last_error
+        assert s.frames > 1                      # поток жив, кадры идут
+        assert p.latest_sbs() is not None
+    finally:
+        p.stop()

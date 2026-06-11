@@ -21,6 +21,8 @@ class PipelineStats:
     # Нижняя кромка bbox = «ноги» — нужна контактной тени рендерера (спека §4).
     # Полные joints появятся с интеграцией ZED (подпроект Ops) — контракт уже учтён.
     bbox: tuple[float, float, float, float] | None = None
+    errors: int = 0
+    last_error: str | None = None
 
 
 def _mask_stats(
@@ -51,6 +53,8 @@ class Pipeline:
         self._bbox: tuple[float, float, float, float] | None = None
         self._frames = 0
         self._fps = 0.0
+        self._errors = 0
+        self._last_error: str | None = None
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -71,26 +75,36 @@ class Pipeline:
 
     def stats(self) -> PipelineStats:
         with self._lock:
-            return PipelineStats(self._frames, self._fps, self._presence.state, self._bbox)
+            return PipelineStats(
+                self._frames, self._fps, self._presence.state, self._bbox,
+                self._errors, self._last_error,
+            )
 
     def _run(self) -> None:
         window_start = time.monotonic()
         window_frames = 0
         while not self._stop.is_set():
-            frame = self._source.read()
-            if frame is None:
-                time.sleep(0.05)  # источник иссяк/сбоит — ждём, не падаем
+            try:
+                frame = self._source.read()
+                if frame is None:
+                    time.sleep(0.05)  # источник иссяк/сбоит — ждём, не падаем
+                    continue
+                alpha = self._engine.process(frame.rgb)
+                coverage, bbox_h, bbox = _mask_stats(alpha)
+                self._presence.update(coverage=coverage, bbox_height_ratio=bbox_h)
+                sbs = pack_sbs(frame.rgb, alpha)
+                now = time.monotonic()
+                window_frames += 1
+                with self._lock:
+                    self._sbs = sbs
+                    self._bbox = bbox
+                    self._frames += 1
+                    if now - window_start >= 1.0:
+                        self._fps = window_frames / (now - window_start)
+                        window_start, window_frames = now, 0
+            except Exception as exc:  # noqa: BLE001 — деградация без тихой смерти (спека §11)
+                with self._lock:
+                    self._errors += 1
+                    self._last_error = f"{type(exc).__name__}: {exc}"
+                time.sleep(0.05)  # не крутимся вхолостую при стабильном сбое
                 continue
-            alpha = self._engine.process(frame.rgb)
-            coverage, bbox_h, bbox = _mask_stats(alpha)
-            self._presence.update(coverage=coverage, bbox_height_ratio=bbox_h)
-            sbs = pack_sbs(frame.rgb, alpha)
-            now = time.monotonic()
-            window_frames += 1
-            with self._lock:
-                self._sbs = sbs
-                self._bbox = bbox
-                self._frames += 1
-                if now - window_start >= 1.0:
-                    self._fps = window_frames / (now - window_start)
-                    window_start, window_frames = now, 0

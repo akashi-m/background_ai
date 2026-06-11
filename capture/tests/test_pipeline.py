@@ -56,6 +56,40 @@ def test_pipeline_stop_is_idempotent(tmp_path: Path) -> None:
     p.stop()  # повторный stop не падает
 
 
+class StallingSource:
+    """N кадров, затем вечный None (камера зависла)."""
+
+    def __init__(self, frames: int = 20, w: int = 64, h: int = 48) -> None:
+        self._left = frames
+        self._w, self._h = w, h
+
+    def read(self):  # type: ignore[no-untyped-def]
+        import numpy as np
+
+        from capture.frames import Frame
+
+        if self._left <= 0:
+            return None
+        self._left -= 1
+        return Frame(rgb=np.full((self._h, self._w, 3), 200, dtype=np.uint8), t_ms=0.0)
+
+    def close(self) -> None: ...
+
+
+def test_fps_decays_when_source_stalls() -> None:
+    p = Pipeline(StallingSource(frames=40), FakeEngine(), PresenceConfig())
+    p.start()
+    try:
+        deadline = time.monotonic() + 5.0
+        while p.stats().fps == 0.0 and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert p.stats().fps > 0.0      # кадры шли — fps живой
+        time.sleep(2.6)                  # источник завис
+        assert p.stats().fps == 0.0      # fps затух → /health увидит стойло
+    finally:
+        p.stop()
+
+
 class FlakyEngine:
     def __init__(self) -> None:
         self.calls = 0

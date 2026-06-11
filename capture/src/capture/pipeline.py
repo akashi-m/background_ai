@@ -88,6 +88,14 @@ class Pipeline:
                 frame = self._source.read()
                 if frame is None:
                     time.sleep(0.05)  # источник иссяк/сбоит — ждём, не падаем
+                    now = time.monotonic()
+                    elapsed = now - window_start
+                    if elapsed >= 2.0:
+                        with self._lock:
+                            # Сбрасываем fps: если были кадры до зависания — показываем их,
+                            # иначе 0 (источник висит без данных).
+                            self._fps = window_frames / elapsed if window_frames > 0 else 0.0
+                        window_start, window_frames = now, 0
                     continue
                 alpha = self._engine.process(frame.rgb)
                 coverage, bbox_h, bbox = _mask_stats(alpha)
@@ -107,4 +115,9 @@ class Pipeline:
                     self._errors += 1
                     self._last_error = f"{type(exc).__name__}: {exc}"
                 time.sleep(0.05)  # не крутимся вхолостую при стабильном сбое
+                now = time.monotonic()
+                if now - window_start >= 2.0:
+                    with self._lock:
+                        self._fps = 0.0
+                    window_start, window_frames = now, 0
                 continue

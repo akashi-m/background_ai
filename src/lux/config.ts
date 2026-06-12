@@ -1,0 +1,15 @@
+// Все тайминги/пороги Lux-опыта. Меняются здесь, без правок логики (спека §5).
+export const LUX_CONFIG = {
+  captureUrl: 'http://localhost:8765', // capture-сервис (offer/ws)
+  approachCm: 250,    // ближе — начинается APPROACH
+  approachSec: 1.2,   // длительность проявления зеркала
+  exitSec: 10,        // отсутствие в MIRROR до возврата в IDLE
+  staleSec: 2,        // телеметрия старше — поток считается протухшим
+  fadeSec: 1.0,       // плавный уход в IDLE при штатном выходе
+  fastFadeSec: 0.3,   // быстрый уход при сбое потока (зависший кадр не показываем)
+  slideSec: 8,        // период кроссфейда слайдшоу IDLE
+  wrapStrength: 0.6,  // сила light wrap 0..1
+  grainAmount: 0.04,  // сила зерна 0..1
+  shadowStrength: 0.5,// дефолтная плотность контактной тени
+  feather: [0.05, 0.95] as [number, number], // smoothstep краёв альфы
+}

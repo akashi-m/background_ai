@@ -69,7 +69,15 @@ let telemetry = {}
 async function start(){
   const pc = new RTCPeerConnection()
   pc.addTransceiver('video', { direction: 'recvonly' })
-  pc.ontrack = (e) => { video.srcObject = new MediaStream([e.track]) }
+  pc.ontrack = (e) => {
+    video.srcObject = new MediaStream([e.track])
+    // Chrome может заблокировать autoplay → чёрный экран; играем явно,
+    // при отказе ждём первого клика по странице.
+    video.play().catch(() => {
+      stats.textContent = 'кликни страницу, чтобы запустить видео'
+      document.addEventListener('click', () => video.play(), { once: true })
+    })
+  }
   const offer = await pc.createOffer()
   await pc.setLocalDescription(offer)
   const resp = await fetch('/offer', {

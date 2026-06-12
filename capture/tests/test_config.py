@@ -28,3 +28,31 @@ def test_parse_args_bad_source() -> None:
 
     with pytest.raises(SystemExit):
         parse_args(["--source", "hologram"])
+
+
+def test_model_and_ratio_defaults() -> None:
+    cfg = CaptureConfig()
+    assert cfg.model == "mobilenetv3"
+    assert cfg.ratio == 0.25
+
+
+def test_parse_args_model_resnet50() -> None:
+    cfg = parse_args(["--engine", "rvm", "--model", "resnet50", "--ratio", "0.4"])
+    assert cfg.model == "resnet50"
+    assert cfg.ratio == 0.4
+
+
+def test_parse_args_bad_model() -> None:
+    import pytest
+
+    with pytest.raises(SystemExit):
+        parse_args(["--model", "transformer9000"])
+
+
+def test_parse_args_ratio_out_of_range() -> None:
+    import pytest
+
+    with pytest.raises(SystemExit):
+        parse_args(["--ratio", "1.5"])
+    with pytest.raises(SystemExit):
+        parse_args(["--ratio", "0"])

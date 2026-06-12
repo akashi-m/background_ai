@@ -60,3 +60,26 @@ async def test_viewer_served(client) -> None:
     resp = await client.get("/viewer")
     assert resp.status == 200
     assert "text/html" in resp.headers["Content-Type"]
+
+
+async def test_frame_png(client) -> None:
+    resp = await client.get("/frame.png")
+    assert resp.status == 200
+    assert resp.headers["Content-Type"] == "image/png"
+    body = await resp.read()
+    assert body[:8] == b"\x89PNG\r\n\x1a\n"  # сигнатура PNG
+
+
+async def test_frame_png_no_frame_yet() -> None:
+    class EmptyPipeline(FakePipeline):
+        def latest_sbs(self) -> np.ndarray | None:
+            return None
+
+    app = build_app(EmptyPipeline(), telemetry_hz=50)
+    c = TestClient(TestServer(app))
+    await c.start_server()
+    try:
+        resp = await c.get("/frame.png")
+        assert resp.status == 503
+    finally:
+        await c.close()

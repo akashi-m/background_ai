@@ -73,6 +73,20 @@ async def _viewer(request: web.Request) -> web.Response:
     return web.Response(text=VIEWER_HTML.read_text(), content_type="text/html")
 
 
+async def _frame_png(request: web.Request) -> web.Response:
+    """Lossless-снимок последнего SBS-кадра — оценка матта мимо WebRTC-кодека."""
+    import cv2
+
+    pipeline: PipelineLike = request.app["pipeline"]
+    sbs = pipeline.latest_sbs()
+    if sbs is None:
+        return web.Response(status=503, text="кадра ещё нет")
+    ok, png = cv2.imencode(".png", cv2.cvtColor(sbs, cv2.COLOR_RGB2BGR))
+    if not ok:
+        return web.Response(status=500, text="PNG не закодировался")
+    return web.Response(body=png.tobytes(), content_type="image/png")
+
+
 async def _offer(request: web.Request) -> web.Response:
     from capture.webrtc import handle_offer
 
@@ -97,6 +111,7 @@ def build_app(pipeline: PipelineLike, telemetry_hz: int = 15) -> web.Application
     app.router.add_get("/health", _health)
     app.router.add_get("/ws", _ws)
     app.router.add_get("/viewer", _viewer)
+    app.router.add_get("/frame.png", _frame_png)
     app.router.add_post("/offer", _offer)
     app.on_shutdown.append(_on_shutdown)
     return app

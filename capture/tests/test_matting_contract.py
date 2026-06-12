@@ -51,6 +51,24 @@ def test_contract_stable_across_calls(engine: MattingEngine) -> None:
     assert a1.shape == a2.shape          # рекуррентное состояние не ломает форму
 
 
+def test_make_engine_selects_model_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    """--model выбирает файл модели; --ratio доходит до движка (без onnx-сессии)."""
+    captured: dict[str, object] = {}
+
+    class FakeRvm:
+        def __init__(self, model_path: str, downsample_ratio: float = 0.25) -> None:
+            captured["path"] = model_path
+            captured["ratio"] = downsample_ratio
+
+    import capture.matting.rvm_engine as rvm_mod
+
+    monkeypatch.setattr(rvm_mod, "RvmEngine", FakeRvm)
+    cfg = CaptureConfig(engine="rvm", model="resnet50", ratio=0.4, models_dir="models")
+    make_engine(cfg)
+    assert captured["path"] == "models/rvm_resnet50_fp32.onnx"
+    assert captured["ratio"] == 0.4
+
+
 def test_rvm_survives_resolution_change() -> None:
     if "rvm" not in engines():
         pytest.skip("нет модели rvm")

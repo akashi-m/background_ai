@@ -15,9 +15,12 @@ class MattingEngine(Protocol):
 
 def make_engine(cfg: CaptureConfig) -> MattingEngine:
     if cfg.engine == "rvm":
-        from capture.matting.rvm_engine import RvmEngine
+        # импорт модуля (не имени): тесты подменяют RvmEngine через monkeypatch
+        import capture.matting.rvm_engine as rvm_mod
 
-        return RvmEngine(f"{cfg.models_dir}/rvm_mobilenetv3_fp32.onnx")
+        return rvm_mod.RvmEngine(
+            f"{cfg.models_dir}/rvm_{cfg.model}_fp32.onnx", downsample_ratio=cfg.ratio
+        )
     from capture.matting.mediapipe_engine import MediapipeEngine
 
     return MediapipeEngine(f"{cfg.models_dir}/selfie_segmenter.tflite")

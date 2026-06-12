@@ -12,4 +12,8 @@ mkdir -p models
 [ -f models/rvm_mobilenetv3_fp32.onnx ] || curl -L -o models/rvm_mobilenetv3_fp32.onnx \
   "https://github.com/PeterL1n/RobustVideoMatting/releases/download/v1.0.0/rvm_mobilenetv3_fp32.onnx"
 
+# RobustVideoMatting resnet50 ONNX (максимальное качество краёв, медленнее), ~100 МБ
+[ -f models/rvm_resnet50_fp32.onnx ] || curl -L -o models/rvm_resnet50_fp32.onnx \
+  "https://github.com/PeterL1n/RobustVideoMatting/releases/download/v1.0.0/rvm_resnet50_fp32.onnx"
+
 ls -la models/

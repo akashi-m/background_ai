@@ -1,6 +1,6 @@
 // Стейт-машина опыта (спека §5). Вход каждый кадр: присутствие/дистанция из
 // телеметрии + здоровье потока. Выход: фаза + mirrorOpacity (0..1) для рендера.
-// Сломанный композит не показывается никогда: !healthy → IDLE с быстрым фейдом.
+// Сломанный композит не показывается никогда: !healthy → IDLE с быстрым фейдом. (исключение: форс-режим F5 — дев-инструмент, health игнорирует).
 
 export type Phase = 'IDLE' | 'APPROACH' | 'MIRROR'
 
@@ -63,7 +63,7 @@ export class Experience {
           this.phase = 'IDLE'
         } else {
           this.approachT += dt
-          if (this.approachT >= this.cfg.approachSec - 1e-6) this.phase = 'MIRROR'
+          if (this.approachT >= this.cfg.approachSec - 1e-6) this.phase = 'MIRROR' // -1e-6: float-накопление dt (0.1×10 < 1.0)
         }
       } else {
         // MIRROR: уходим только по накопленному отсутствию

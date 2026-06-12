@@ -97,10 +97,10 @@ class Pipeline:
                             self._fps = window_frames / elapsed if window_frames > 0 else 0.0
                         window_start, window_frames = now, 0
                     continue
-                alpha = self._engine.process(frame.rgb)
+                fg, alpha = self._engine.process(frame.rgb)
                 coverage, bbox_h, bbox = _mask_stats(alpha)
                 self._presence.update(coverage=coverage, bbox_height_ratio=bbox_h)
-                sbs = pack_sbs(frame.rgb, alpha)
+                sbs = pack_sbs(fg, alpha)
                 now = time.monotonic()
                 window_frames += 1
                 with self._lock:

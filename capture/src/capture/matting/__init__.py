@@ -8,8 +8,12 @@ from capture.config import CaptureConfig
 
 
 class MattingEngine(Protocol):
-    def process(self, rgb: np.ndarray) -> np.ndarray:
-        """[H,W,3] uint8 RGB → альфа [H,W] float32 0..1."""
+    def process(self, rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """[H,W,3] uint8 RGB → (цвет переднего плана uint8, альфа [H,W] float32 0..1).
+
+        Цвет — деконтаминированный, если движок умеет (RVM fgr: фон вычищен
+        из полупрозрачного края); иначе входной кадр как есть.
+        """
         ...
 
 

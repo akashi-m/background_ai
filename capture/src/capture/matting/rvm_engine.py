@@ -20,7 +20,7 @@ class RvmEngine:
         self._rec: list[np.ndarray] = [np.zeros((1, 1, 1, 1), dtype=np.float32)] * 4
         self._shape: tuple[int, int] | None = None
 
-    def process(self, rgb: np.ndarray) -> np.ndarray:
+    def process(self, rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         if rgb.shape[:2] != self._shape:
             self._shape = (rgb.shape[0], rgb.shape[1])
             self.reset()
@@ -36,7 +36,9 @@ class RvmEngine:
             },
         )
         self._rec = list(rec)
-        return np.ascontiguousarray(pha[0, 0], dtype=np.float32)
+        # fgr — деконтаминированный цвет: модель вычищает фон из края (спилл)
+        fg = (fgr[0].transpose(1, 2, 0) * 255.0 + 0.5).clip(0, 255).astype(np.uint8)
+        return fg, np.ascontiguousarray(pha[0, 0], dtype=np.float32)
 
     def reset(self) -> None:
         """Сбросить рекуррентное состояние (смена сцены/источника)."""

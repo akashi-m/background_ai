@@ -37,18 +37,30 @@ def engine(request: pytest.FixtureRequest) -> MattingEngine:
 
 def test_contract_shape_dtype_range(engine: MattingEngine) -> None:
     rgb = synthetic_frame()
-    alpha = engine.process(rgb)
+    fg, alpha = engine.process(rgb)
     assert alpha.shape == rgb.shape[:2]
     assert alpha.dtype == np.float32
     assert float(alpha.min()) >= 0.0 and float(alpha.max()) <= 1.0
     assert not np.isnan(alpha).any()
+    assert fg.shape == rgb.shape         # цвет переднего плана — как входной кадр
+    assert fg.dtype == np.uint8
 
 
 def test_contract_stable_across_calls(engine: MattingEngine) -> None:
     rgb = synthetic_frame()
-    a1 = engine.process(rgb)
-    a2 = engine.process(rgb)
+    _, a1 = engine.process(rgb)
+    _, a2 = engine.process(rgb)
     assert a1.shape == a2.shape          # рекуррентное состояние не ломает форму
+
+
+def test_mediapipe_fg_is_passthrough() -> None:
+    """Mediapipe не умеет деконтаминацию — отдаёт вход без правок."""
+    if "mediapipe" not in engines():
+        pytest.skip("нет модели mediapipe")
+    cfg = CaptureConfig(engine="mediapipe", models_dir=str(MODELS))
+    rgb = synthetic_frame()
+    fg, _ = make_engine(cfg).process(rgb)
+    assert fg is rgb or np.array_equal(fg, rgb)
 
 
 def test_make_engine_selects_model_file(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -74,7 +86,7 @@ def test_rvm_survives_resolution_change() -> None:
         pytest.skip("нет модели rvm")
     cfg = CaptureConfig(engine="rvm", models_dir=str(MODELS))
     e = make_engine(cfg)
-    a1 = e.process(synthetic_frame(320, 240))
-    a2 = e.process(synthetic_frame(640, 480))  # раньше падало в ONNX Expand
+    _, a1 = e.process(synthetic_frame(320, 240))
+    _, a2 = e.process(synthetic_frame(640, 480))  # раньше падало в ONNX Expand
     assert a1.shape == (240, 320)
     assert a2.shape == (480, 640)

@@ -19,8 +19,34 @@ def make_clip(path: Path, frames: int = 10, w: int = 64, h: int = 48) -> None:
 class FakeEngine:
     """Движок-заглушка: альфа = яркость > 0.5 (детерминированно для теста)."""
 
-    def process(self, rgb: np.ndarray) -> np.ndarray:
-        return (rgb[:, :, 0] > 128).astype(np.float32)
+    def process(self, rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        return rgb, (rgb[:, :, 0] > 128).astype(np.float32)
+
+
+class TintingEngine:
+    """Красит передний план в константу — проверка, что SBS пакует цвет движка."""
+
+    def process(self, rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        fg = np.full_like(rgb, 7)
+        return fg, np.ones(rgb.shape[:2], dtype=np.float32)
+
+
+def test_pipeline_packs_engine_fg(tmp_path: Path) -> None:
+    clip = tmp_path / "tint.mp4"
+    make_clip(clip, frames=30, w=64, h=48)
+    from capture.sources.file import FileSource
+
+    p = Pipeline(FileSource(str(clip)), TintingEngine(), PresenceConfig())
+    p.start()
+    try:
+        deadline = time.monotonic() + 5.0
+        while p.latest_sbs() is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        sbs = p.latest_sbs()
+        assert sbs is not None
+        assert (sbs[:, :64] == 7).all()  # слева — цвет движка, не сырой кадр
+    finally:
+        p.stop()
 
 
 def test_pipeline_produces_sbs_frames(tmp_path: Path) -> None:
@@ -94,11 +120,11 @@ class FlakyEngine:
     def __init__(self) -> None:
         self.calls = 0
 
-    def process(self, rgb: np.ndarray) -> np.ndarray:
+    def process(self, rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         self.calls += 1
         if self.calls % 2 == 0:
             raise RuntimeError("boom")
-        return (rgb[:, :, 0] > 128).astype(np.float32)
+        return rgb, (rgb[:, :, 0] > 128).astype(np.float32)
 
 
 def test_pipeline_survives_engine_errors(tmp_path: Path) -> None:

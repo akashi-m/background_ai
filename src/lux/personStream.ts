@@ -38,6 +38,11 @@ export class PersonStream {
 
   stop(): void {
     this.stopped = true
+    // Гард: очистить таймер реконнекта если он ещё висит.
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
     this.teardown()
   }
 
@@ -92,6 +97,8 @@ export class PersonStream {
         // colorSpace не задаём: сырой sRGB камеры — то, что нужно (см. v1)
       }
       pc.onconnectionstatechange = () => {
+        // Гард: событие старого соединения не должно трогать новое.
+        if (pc !== this.pc) return
         if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
           this.scheduleReconnect()
         }
@@ -102,6 +109,7 @@ export class PersonStream {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sdp: pc.localDescription!.sdp, type: pc.localDescription!.type }),
+        signal: AbortSignal.timeout(5000),
       })
       if (!resp.ok) throw new Error(`offer: HTTP ${resp.status}`)
       await pc.setRemoteDescription(await resp.json())
@@ -111,6 +119,8 @@ export class PersonStream {
       const ws = new WebSocket(wsUrl)
       this.ws = ws
       ws.onmessage = (e) => {
+        // Гард: событие старого соединения не должно трогать новое.
+        if (ws !== this.ws) return
         try {
           const t = parseTelemetry(JSON.parse(e.data as string))
           if (t) {
@@ -125,7 +135,11 @@ export class PersonStream {
           this.badMessages++
         }
       }
-      ws.onclose = () => this.scheduleReconnect()
+      ws.onclose = () => {
+        // Гард: событие старого соединения не должно трогать новое.
+        if (ws !== this.ws) return
+        this.scheduleReconnect()
+      }
       ws.onerror = () => { /* за ошибкой следует close — реконнект там */ }
     } catch {
       this.scheduleReconnect()

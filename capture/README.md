@@ -10,6 +10,10 @@
 
 ## Запуск (dev на Маке)
 
+iPhone как камера: включи Continuity Camera (айфон рядом, тот же Apple ID) —
+он появится как системная камера; обычно `--camera-index 1`. Качество заметно
+лучше встроенной вебки — рекомендуется для «теста люкса».
+
     uv run capture --source webcam --engine mediapipe   # быстрый dev, ~30 fps
     uv run capture --source webcam --engine rvm         # качественные края, ~15–19 fps на M4 (CPU)
     uv run capture --source file:клип.mp4 --engine rvm  # детерминированный прогон

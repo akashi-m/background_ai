@@ -48,9 +48,9 @@ export function makeLutTexture(lut: ParsedLut): THREE.Data3DTexture {
   const n = lut.size
   const rgba = new Uint8Array(n * n * n * 4)
   for (let i = 0, j = 0; i < lut.data.length; i += 3, j += 4) {
-    rgba[j] = Math.round(lut.data[i] * 255)
-    rgba[j + 1] = Math.round(lut.data[i + 1] * 255)
-    rgba[j + 2] = Math.round(lut.data[i + 2] * 255)
+    rgba[j] = Math.max(0, Math.min(255, Math.round(lut.data[i] * 255)))
+    rgba[j + 1] = Math.max(0, Math.min(255, Math.round(lut.data[i + 1] * 255)))
+    rgba[j + 2] = Math.max(0, Math.min(255, Math.round(lut.data[i + 2] * 255)))
     rgba[j + 3] = 255
   }
   const tex = new THREE.Data3DTexture(rgba, n, n, n)

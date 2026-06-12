@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseCube, identityLut } from './lut'
+import { parseCube, identityLut, makeLutTexture } from './lut'
 
 const CUBE_2 = `# комментарий
 TITLE "test"
@@ -43,5 +43,15 @@ describe('identityLut', () => {
     expect(Array.from(lut.data.slice(0, 3))).toEqual([0, 0, 0])
     const last = lut.data.length - 3
     expect(Array.from(lut.data.slice(last))).toEqual([1, 1, 1])
+  })
+})
+
+describe('makeLutTexture', () => {
+  it('значения за [0,1] клампятся, а не заворачиваются в Uint8Array', () => {
+    const lut = parseCube('LUT_3D_SIZE 2\n' + '-0.01 0 0\n'.repeat(7) + '1.01 1 1\n')!
+    const tex = makeLutTexture(lut)
+    const rgba = tex.image.data as Uint8Array
+    expect(rgba[0]).toBe(0)              // не 253
+    expect(rgba[(8 - 1) * 4]).toBe(255)  // не 2
   })
 })

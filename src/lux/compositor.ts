@@ -122,7 +122,7 @@ export class LuxCompositor {
           // vUv.y инвертируем: bbox в видео-координатах (y вниз)
           vec2 p = vec2(vUv.x, 1.0 - vUv.y);
           float d = length((p - uC) / uR);
-          float a = smoothstep(1.0, 0.35, d) * uOpacity;
+          float a = (1.0 - smoothstep(0.35, 1.0, d)) * uOpacity;
           gl_FragColor = vec4(0.0, 0.0, 0.0, a);
         }
       `,
@@ -130,8 +130,9 @@ export class LuxCompositor {
 
     // personMat требует GLSL3: sampler3D доступен только в WebGL2/GLSL ES 3.00.
     // Конвертация: VERT3 (out вместо varying), in-квалификаторы, out vec4 fragColor,
-    // texture() вместо texture2D() везде. Отклонение от плана — план смешивал
-    // texture2D и sampler3D в GLSL1, что не компилируется.
+    // texture() вместо texture2D() везде.
+    // GLSL3 явно: sampler3D — тип ES 3.0; three сам конвертирует GLSL1-шейдеры,
+    // но явная версия честнее и не зависит от авто-конвертации.
     this.personMat = new THREE.ShaderMaterial({
       transparent: true,
       depthTest: false,
@@ -249,6 +250,7 @@ export class LuxCompositor {
     // 1. мир → RT (только когда зеркало видно)
     if (mirrorVisible) {
       this.renderer.setRenderTarget(this.sceneRT)
+      this.renderer.clear() // RT обязан чиститься сам: глобальный autoClear=false
       this.renderer.render(opts.scene, opts.camera)
       this.renderer.setRenderTarget(null)
 
@@ -282,8 +284,23 @@ export class LuxCompositor {
 
     // 4. контактная тень
     if (mirrorVisible && opts.toggles.shadow && opts.shadow) {
-      this.shadowMat.uniforms.uC.value.set(opts.shadow.cx, opts.shadow.cy)
-      this.shadowMat.uniforms.uR.value.set(opts.shadow.rx, opts.shadow.ry)
+      // тень задана в видео-координатах — переводим в экранные той же cover-fit
+      // математикой, что у фигуры (uv = (vUv-0.5)*scale+0.5 ⇒ экран = (видео-0.5)/scale+0.5)
+      let sc = { x: opts.shadow.cx, y: opts.shadow.cy, rx: opts.shadow.rx, ry: opts.shadow.ry }
+      if (opts.personAspect) {
+        const va = opts.personAspect
+        const ca = opts.canvasAspect
+        const sx = ca > va ? 1 : ca / va
+        const sy = ca > va ? va / ca : 1
+        sc = {
+          x: (sc.x - 0.5) / sx + 0.5,
+          y: (sc.y - 0.5) / sy + 0.5,
+          rx: sc.rx / sx,
+          ry: sc.ry / sy,
+        }
+      }
+      this.shadowMat.uniforms.uC.value.set(sc.x, sc.y)
+      this.shadowMat.uniforms.uR.value.set(sc.rx, sc.ry)
       this.shadowMat.uniforms.uOpacity.value =
         opts.shadow.opacity * opts.shadowStrength * opts.mirrorOpacity
       this.pass(this.shadowMat, null)

@@ -10,9 +10,11 @@
 
 ## Запуск (dev на Маке)
 
-iPhone как камера: включи Continuity Camera (айфон рядом, тот же Apple ID) —
-он появится как системная камера; обычно `--camera-index 1`. Качество заметно
-лучше встроенной вебки — рекомендуется для «теста люкса».
+Телефон как камера (заметно лучше встроенной вебки — рекомендуется для «теста люкса»):
+- **Samsung S24/S23 (One UI 6+)**: подключи USB-C → в шторке уведомление USB →
+  «Веб-камера». Телефон становится стандартной UVC-камерой. План Б: Iriun Webcam.
+- **iPhone**: Continuity Camera (рядом, тот же Apple ID).
+Найти индекс камеры: `uv run capture --list-cameras`, затем `--camera-index <N>`.
 
     uv run capture --source webcam --engine mediapipe   # быстрый dev, ~30 fps
     uv run capture --source webcam --engine rvm         # качественные края, ~15–19 fps на M4 (CPU)

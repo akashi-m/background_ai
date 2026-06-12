@@ -15,6 +15,8 @@ export interface WorldMeta {
   dollyMaxCm: number
   depthAmountCm?: number // photo25d: сила 2.5D-объёма (дефолт 60)
   source?: string     // происхождение (marble:<id>, съёмка, ...)
+  lut?: string           // .cube гармонизации интерьера (Lux)
+  shadowStrength: number // плотность контактной тени 0..1 (Lux, дефолт 0.5)
 }
 
 const DEFAULT_TRANSFORM: WorldTransform = { position: [0, 0, 0], rotationYDeg: 0, scale: 1 }
@@ -60,6 +62,21 @@ export function parseWorldMeta(json: unknown, worldName: string): WorldMeta {
     depthAmountCm = j.depthAmountCm
   }
 
+  let lut: string | undefined
+  if (j.lut !== undefined) {
+    if (typeof j.lut !== 'string' || !j.lut) fail(worldName, 'кривой lut')
+    lut = j.lut
+  }
+
+  let shadowStrength = 0.5
+  if (j.shadowStrength !== undefined) {
+    if (
+      typeof j.shadowStrength !== 'number' || !isFinite(j.shadowStrength) ||
+      j.shadowStrength < 0 || j.shadowStrength > 1
+    ) fail(worldName, 'кривой shadowStrength')
+    shadowStrength = j.shadowStrength
+  }
+
   return {
     title: j.title,
     format: j.format,
@@ -70,5 +87,7 @@ export function parseWorldMeta(json: unknown, worldName: string): WorldMeta {
     dollyMaxCm,
     depthAmountCm,
     source: typeof j.source === 'string' ? j.source : undefined,
+    lut,
+    shadowStrength,
   }
 }

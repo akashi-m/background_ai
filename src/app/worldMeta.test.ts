@@ -66,4 +66,15 @@ describe('parseWorldMeta', () => {
     expect(parseWorldMeta(VALID_PHOTO, 'b').depthAmountCm).toBeUndefined()
     expect(() => parseWorldMeta({ ...VALID_PHOTO, depthAmountCm: -1 }, 'b')).toThrow(/b/)
   })
+
+  it('lux-поля: lut и shadowStrength валидируются и опциональны', () => {
+    const m = parseWorldMeta({ ...VALID_PHOTO, lut: 'interior.cube', shadowStrength: 0.7 }, 'b')
+    expect(m.lut).toBe('interior.cube')
+    expect(m.shadowStrength).toBeCloseTo(0.7)
+    const d = parseWorldMeta(VALID_PHOTO, 'b')
+    expect(d.lut).toBeUndefined()
+    expect(d.shadowStrength).toBe(0.5)
+    expect(() => parseWorldMeta({ ...VALID_PHOTO, shadowStrength: 2 }, 'b')).toThrow(/b/)
+    expect(() => parseWorldMeta({ ...VALID_PHOTO, lut: 7 }, 'b')).toThrow(/b/)
+  })
 })

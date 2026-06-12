@@ -12,7 +12,24 @@ from capture.server import build_app
 from capture.sources import make_source
 
 
+def list_cameras() -> None:
+    """Перечислить доступные камеры (индексы 0..5) — для выбора S24/Continuity."""
+    import cv2
+
+    for i in range(6):
+        cap = cv2.VideoCapture(i)
+        if cap.isOpened():
+            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            print(f"  индекс {i}: {w}x{h}")
+            cap.release()
+    print("запуск: uv run capture --source webcam --camera-index <N>")
+
+
 def main(argv: list[str] | None = None) -> None:
+    if argv is None and "--list-cameras" in sys.argv or argv and "--list-cameras" in argv:
+        list_cameras()
+        return
     cfg = parse_args(argv)
     try:
         source = make_source(cfg)

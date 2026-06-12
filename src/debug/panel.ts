@@ -63,7 +63,7 @@ export class DebugPanel {
   }
 
   // Зовётся каждый кадр рендера
-  frame(eye: EyeCm, faceVisible: boolean, segFps: number, videoLagMs: number): void {
+  frame(eye: EyeCm, faceVisible: boolean, segFps: number, videoLagMs: number, extra?: string): void {
     this.renderFrames++
     const now = performance.now()
     if (now - this.windowStart > 1000) {
@@ -78,7 +78,8 @@ export class DebugPanel {
         `возраст кадра камеры: ~${videoLagMs.toFixed(0)} мс\n` +
         `eye: x=${eye.x.toFixed(1)} y=${eye.y.toFixed(1)} z=${eye.z.toFixed(1)} см\n` +
         `лицо: ${faceVisible ? 'да' : 'нет'}\n` +
-        `клавиши: 1..9 мир, W/M миры, A выравнивание, C калибровка, ,/. отклик, ;/' глубина`
+        `клавиши: 1..9 мир, W/M миры, A выравнивание, C калибровка, F1..F4 слои, F5 фаза` +
+        (extra ? `\n${extra}` : '')
     }
   }
 }

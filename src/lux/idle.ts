@@ -17,7 +17,7 @@ export class IdleSlides {
     this.textures = loaded
       .filter((r): r is PromiseFulfilledResult<THREE.Texture> => r.status === 'fulfilled')
       .map((r) => {
-        r.value.colorSpace = THREE.SRGBColorSpace
+        // colorSpace НЕ задаём: миры грузят те же фото как raw sRGB (см. depthPhoto) — иначе кроссфейд «хлопает» яркостью
         return r.value
       })
     if (this.textures.length === 0) console.warn('слайдшоу: ни один бэкплейт не загрузился')

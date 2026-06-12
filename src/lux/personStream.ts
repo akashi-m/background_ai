@@ -92,6 +92,7 @@ export class PersonStream {
       this.pc = pc
       pc.addTransceiver('video', { direction: 'recvonly' })
       pc.ontrack = (e) => {
+        if (pc !== this.pc) return
         this.video.srcObject = new MediaStream([e.track])
         this.texture = new THREE.VideoTexture(this.video)
         // colorSpace не задаём: сырой sRGB камеры — то, что нужно (см. v1)

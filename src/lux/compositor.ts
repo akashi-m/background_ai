@@ -53,7 +53,12 @@ export class LuxCompositor {
   private personMat: THREE.ShaderMaterial
   private fadeMat: THREE.MeshBasicMaterial
 
-  constructor(private renderer: THREE.WebGLRenderer, width: number, height: number) {
+  constructor(
+    private renderer: THREE.WebGLRenderer,
+    width: number,
+    height: number,
+    tuning: { wrapStrength: number; grainAmount: number; feather: [number, number] },
+  ) {
     this.sceneRT = new THREE.WebGLRenderTarget(width, height)
     this.wrapRT_A = new THREE.WebGLRenderTarget(width >> 2, height >> 2)
     this.wrapRT_B = new THREE.WebGLRenderTarget(width >> 2, height >> 2)
@@ -145,9 +150,9 @@ export class LuxCompositor {
         uOpacity: { value: 0 },
         uUvScale: { value: new THREE.Vector2(1, 1) },
         uUvOffset: { value: new THREE.Vector2(0, 0) },
-        uFeather: { value: new THREE.Vector2(0.05, 0.95) },
-        uWrapStrength: { value: 0.6 },
-        uGrain: { value: 0.04 },
+        uFeather: { value: new THREE.Vector2(tuning.feather[0], tuning.feather[1]) },
+        uWrapStrength: { value: tuning.wrapStrength },
+        uGrain: { value: tuning.grainAmount },
         uTime: { value: 0 },
         uLutOn: { value: 1 },
         uWrapOn: { value: 1 },

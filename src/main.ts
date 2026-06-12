@@ -38,11 +38,14 @@ async function start() {
   document.body.appendChild(renderer.domElement)
 
   const compositor = new LuxCompositor(
-    renderer, innerWidth * renderer.getPixelRatio(), innerHeight * renderer.getPixelRatio(),
+    renderer,
+    Math.floor(innerWidth * renderer.getPixelRatio()),
+    Math.floor(innerHeight * renderer.getPixelRatio()),
+    { wrapStrength: LUX_CONFIG.wrapStrength, grainAmount: LUX_CONFIG.grainAmount, feather: LUX_CONFIG.feather },
   )
   addEventListener('resize', () => {
     renderer.setSize(innerWidth, innerHeight)
-    compositor.setSize(innerWidth * renderer.getPixelRatio(), innerHeight * renderer.getPixelRatio())
+    compositor.setSize(Math.floor(innerWidth * renderer.getPixelRatio()), Math.floor(innerHeight * renderer.getPixelRatio()))
   })
 
   // Миры-интерьеры + их LUT
@@ -71,6 +74,12 @@ async function start() {
   const toggles: HarmonizeToggles = { lut: true, wrap: true, shadow: true, grain: true }
 
   new AlignController(() => worlds[switcher.index], () => SCENE_CONFIG.worlds[switcher.index])
+
+  const PRODUCTION_SCREEN_W_CM = 120
+  const savedGain = Number(localStorage.getItem('stellar-mirror.parallaxGain'))
+  let parallaxGain = Number.isFinite(savedGain) && savedGain > 0 && savedGain <= 2
+    ? savedGain
+    : Math.min(1, Math.max(0.5, calibration.screenWcm / PRODUCTION_SCREEN_W_CM))
 
   addEventListener('keydown', (e) => {
     if (e.target instanceof HTMLInputElement) return
@@ -106,12 +115,6 @@ async function start() {
     ;(video as HTMLVideoElement & { requestVideoFrameCallback(cb: () => void): void }).requestVideoFrameCallback(onVideoFrame)
   }
   ;(video as HTMLVideoElement & { requestVideoFrameCallback(cb: () => void): void }).requestVideoFrameCallback(onVideoFrame)
-
-  const PRODUCTION_SCREEN_W_CM = 120
-  const savedGain = Number(localStorage.getItem('stellar-mirror.parallaxGain'))
-  let parallaxGain = Number.isFinite(savedGain) && savedGain > 0 && savedGain <= 2
-    ? savedGain
-    : Math.min(1, Math.max(0.5, calibration.screenWcm / PRODUCTION_SCREEN_W_CM))
 
   const camera = new THREE.PerspectiveCamera()
 

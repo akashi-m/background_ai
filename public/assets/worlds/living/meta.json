@@ -5,6 +5,7 @@
   "flat": true,
   "shadowStrength": 0.6,
   "lightDirX": -1,
+  "shadow": { "lightsFile": "lights.json", "worldPosFile": "roomworld.exr" },
   "format": "photo25d",
   "file": "photo.png",
   "depthFile": "depth.png",

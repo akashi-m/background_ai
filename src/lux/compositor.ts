@@ -65,7 +65,7 @@ export class LuxCompositor {
     height: number,
     tuning: {
       wrapStrength: number; grainAmount: number; feather: [number, number]
-      colorMatch: { cast: number; exposure: number }
+      colorMatch: { cast: number; exposure: number }; shadeAmount: number
     },
   ) {
     this.sceneRT = new THREE.WebGLRenderTarget(width, height)
@@ -201,6 +201,8 @@ export class LuxCompositor {
         uWrapStrength: { value: tuning.wrapStrength },
         uCast: { value: tuning.colorMatch.cast },
         uExp: { value: tuning.colorMatch.exposure },
+        uShade: { value: tuning.shadeAmount },
+        uShadeDirX: { value: 0 },
         uLutOn: { value: 1 },
         uWrapOn: { value: 1 },
         uColorMatchOn: { value: 1 },
@@ -215,6 +217,7 @@ export class LuxCompositor {
         uniform float uOpacity; uniform vec2 uUvScale; uniform vec2 uUvOffset;
         uniform vec2 uFeather; uniform float uWrapStrength;
         uniform float uCast; uniform float uExp;
+        uniform float uShade; uniform float uShadeDirX;
         uniform float uLutOn; uniform float uWrapOn;
         uniform float uColorMatchOn;
         out vec4 fragColor;
@@ -245,6 +248,11 @@ export class LuxCompositor {
             float expMul = mix(1.0, luma / 0.5, uExp);
             rgb = clamp(rgb * castMul * expMul, 0.0, 1.0);
           }
+
+          // направленный свет сцены: сторона к ключу ярче, от ключа темнее
+          // uShadeDirX: +1 свет слева (левый край ярче), -1 свет справа
+          float lit = 1.0 + uShade * (0.5 - vUv.x) * 2.0 * uShadeDirX;
+          rgb = clamp(rgb * lit, 0.0, 1.0);
 
           // light wrap: фон «обнимает» контур (максимум на полупрозрачном крае)
           if (uWrapOn > 0.5) {
@@ -339,6 +347,7 @@ export class LuxCompositor {
     backplateAspect: number | null
     person: THREE.Texture | null
     personAspect: number | null
+    lightDirX: number  // направление ключа интерьера: -1 слева, +1 справа, 0 сверху
     mirrorOpacity: number
     shadow: ShadowEllipse | null
     shadowStrength: number
@@ -422,6 +431,7 @@ export class LuxCompositor {
       g.tVideo.value = opts.person
       g.uUvScale.value.set(sx, sy)
       g.uOpacity.value = opts.shadowStrength * opts.mirrorOpacity
+      g.uLightX.value = opts.lightDirX * 0.04 // ключ слева → тень вправо
       this.pass(this.groundShadowMat, this.compositeRT)
     }
 
@@ -437,6 +447,7 @@ export class LuxCompositor {
       u.uLutOn.value = opts.toggles.lut ? 1 : 0
       u.uWrapOn.value = opts.toggles.wrap ? 1 : 0
       u.uColorMatchOn.value = opts.toggles.colorMatch ? 1 : 0
+      u.uShadeDirX.value = -opts.lightDirX // ключ слева (dirX<0) → левый бок ярче
       u.uUvScale.value.set(sx, sy)
       this.pass(this.personMat, this.compositeRT)
     }

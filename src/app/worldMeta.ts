@@ -18,6 +18,7 @@ export interface WorldMeta {
   lut?: string           // .cube гармонизации интерьера (Lux)
   shadowStrength: number // плотность контактной тени 0..1 (Lux, дефолт 0.5)
   flat?: boolean         // плоский плейт-фон зеркала: фото целиком, без параллакс-кропа
+  lightDirX?: number     // направление ключевого света интерьера по X экрана: -1 слева, +1 справа, 0 сверху
 }
 
 const DEFAULT_TRANSFORM: WorldTransform = { position: [0, 0, 0], rotationYDeg: 0, scale: 1 }
@@ -91,5 +92,6 @@ export function parseWorldMeta(json: unknown, worldName: string): WorldMeta {
     lut,
     shadowStrength,
     flat: j.flat === true,
+    lightDirX: typeof j.lightDirX === 'number' && isFinite(j.lightDirX) ? j.lightDirX : 0,
   }
 }

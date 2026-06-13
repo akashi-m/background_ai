@@ -55,7 +55,7 @@ async function start() {
     renderer,
     Math.floor(innerWidth * renderer.getPixelRatio()),
     Math.floor(innerHeight * renderer.getPixelRatio()),
-    { wrapStrength: LUX_CONFIG.wrapStrength, grainAmount: LUX_CONFIG.grainAmount, feather: LUX_CONFIG.feather, colorMatch: LUX_CONFIG.colorMatch },
+    { wrapStrength: LUX_CONFIG.wrapStrength, grainAmount: LUX_CONFIG.grainAmount, feather: LUX_CONFIG.feather, colorMatch: LUX_CONFIG.colorMatch, shadeAmount: LUX_CONFIG.shadeAmount },
   )
   addEventListener('resize', () => {
     renderer.setSize(innerWidth, innerHeight)
@@ -170,6 +170,7 @@ async function start() {
       backplateAspect: active.meta.aspect ?? null,
       person: person.texture,
       personAspect: person.videoAspect,
+      lightDirX: active.meta.lightDirX ?? 0,
       mirrorOpacity: experience.mirrorOpacity,
       shadow,
       shadowStrength: active.meta.shadowStrength,

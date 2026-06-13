@@ -4,6 +4,7 @@
   "depthAmountCm": 0,
   "flat": true,
   "shadowStrength": 0.6,
+  "lightDirX": -1,
   "format": "photo25d",
   "file": "photo.png",
   "depthFile": "depth.png",

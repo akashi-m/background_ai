@@ -3,6 +3,7 @@
   "dollyMaxCm": 0,
   "depthAmountCm": 0,
   "flat": true,
+  "shadowStrength": 0.6,
   "format": "photo25d",
   "file": "photo.png",
   "depthFile": "depth.png",

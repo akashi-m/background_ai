@@ -55,8 +55,8 @@ export class LuxCompositor {
   private grainMat: THREE.ShaderMaterial
   private coverMat: THREE.ShaderMaterial // flat-фон: cover-fit плейт без 3D-камеры
   private slideMat: THREE.ShaderMaterial
-  private shadowMat: THREE.ShaderMaterial
   private personMat: THREE.ShaderMaterial
+  private groundShadowMat: THREE.ShaderMaterial // силуэтная контактная тень у ног
   private fadeMat: THREE.MeshBasicMaterial
 
   constructor(
@@ -179,27 +179,6 @@ export class LuxCompositor {
       `,
     })
 
-    this.shadowMat = new THREE.ShaderMaterial({
-      transparent: true,
-      depthTest: false,
-      uniforms: {
-        uC: { value: new THREE.Vector2(0.5, 0.9) },
-        uR: { value: new THREE.Vector2(0.2, 0.05) },
-        uOpacity: { value: 0 },
-      },
-      vertexShader: VERT,
-      fragmentShader: /* glsl */ `
-        varying vec2 vUv; uniform vec2 uC; uniform vec2 uR; uniform float uOpacity;
-        void main() {
-          // vUv.y инвертируем: bbox в видео-координатах (y вниз)
-          vec2 p = vec2(vUv.x, 1.0 - vUv.y);
-          float d = length((p - uC) / uR);
-          float a = (1.0 - smoothstep(0.35, 1.0, d)) * uOpacity;
-          gl_FragColor = vec4(0.0, 0.0, 0.0, a);
-        }
-      `,
-    })
-
     // personMat требует GLSL3: sampler3D доступен только в WebGL2/GLSL ES 3.00.
     // Конвертация: VERT3 (out вместо varying), in-квалификаторы, out vec4 fragColor,
     // texture() вместо texture2D() везде.
@@ -277,6 +256,50 @@ export class LuxCompositor {
           // зерно теперь финальным пассом на весь кадр (grainMat), не здесь
 
           fragColor = vec4(rgb, a * uOpacity);
+        }
+      `,
+    })
+
+    // Силуэтная контактная тень: тот же cover-fit/флип, что у фигуры, но силуэт
+    // СДВИНУТ вниз по экрану (uDrop) и размыт. Рисуется ПЕРЕД фигурой → везде,
+    // кроме зоны под ступнями, тень закрыта непрозрачной фигурой → мягкое
+    // пятно по форме стоп у пола. Привязка к «линии ног» не нужна.
+    this.groundShadowMat = new THREE.ShaderMaterial({
+      transparent: true,
+      depthTest: false,
+      glslVersion: THREE.GLSL3,
+      uniforms: {
+        tVideo: { value: null },
+        uUvScale: { value: new THREE.Vector2(1, 1) },
+        uUvOffset: { value: new THREE.Vector2(0, 0) },
+        uOpacity: { value: 0 },
+        uDrop: { value: 0.03 },   // сдвиг тени вниз по экрану (доля высоты)
+        uLightX: { value: 0.0 },  // снос вбок (верхний свет → ~0)
+      },
+      vertexShader: VERT3,
+      fragmentShader: /* glsl */ `
+        precision highp float;
+        in vec2 vUv;
+        uniform sampler2D tVideo; uniform vec2 uUvScale; uniform vec2 uUvOffset;
+        uniform float uOpacity; uniform float uDrop; uniform float uLightX;
+        out vec4 fragColor;
+
+        float sampleA(vec2 sv) {
+          vec2 uv = (sv - 0.5) * uUvScale + 0.5 + uUvOffset;
+          if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return 0.0;
+          vec2 uvm = vec2(1.0 - uv.x, uv.y);
+          return texture(tVideo, vec2(0.5 + uvm.x * 0.5, uvm.y)).r;
+        }
+
+        void main() {
+          // смотрим ВЫШE по телу (vUv.y + uDrop) → тень ложится НИЖЕ; мягкое 5×5
+          vec2 base = vUv + vec2(uLightX, uDrop);
+          float a = 0.0;
+          for (int y = -2; y <= 2; y++)
+            for (int x = -2; x <= 2; x++)
+              a += sampleA(base + vec2(float(x), float(y)) * 0.005);
+          a /= 25.0;
+          fragColor = vec4(0.0, 0.0, 0.0, a * uOpacity);
         }
       `,
     })
@@ -383,28 +406,23 @@ export class LuxCompositor {
       this.pass(this.slideMat, this.compositeRT)
     }
 
-    // 4. контактная тень
-    if (mirrorVisible && opts.toggles.shadow && opts.shadow) {
-      // тень задана в видео-координатах — переводим в экранные той же cover-fit
-      // математикой, что у фигуры (uv = (vUv-0.5)*scale+0.5 ⇒ экран = (видео-0.5)/scale+0.5)
-      let sc = { x: opts.shadow.cx, y: opts.shadow.cy, rx: opts.shadow.rx, ry: opts.shadow.ry }
-      if (opts.personAspect) {
-        const va = opts.personAspect
-        const ca = opts.canvasAspect
-        const sx = ca > va ? 1 : ca / va
-        const sy = ca > va ? va / ca : 1
-        sc = {
-          x: (sc.x - 0.5) / sx + 0.5,
-          y: (sc.y - 0.5) / sy + 0.5,
-          rx: sc.rx / sx,
-          ry: sc.ry / sy,
-        }
-      }
-      this.shadowMat.uniforms.uC.value.set(sc.x, sc.y)
-      this.shadowMat.uniforms.uR.value.set(sc.rx, sc.ry)
-      this.shadowMat.uniforms.uOpacity.value =
-        opts.shadow.opacity * opts.shadowStrength * opts.mirrorOpacity
-      this.pass(this.shadowMat, this.compositeRT)
+    // cover-fit фигуры (общий масштаб для тени и фигуры)
+    let sx = 1, sy = 1
+    if (opts.personAspect) {
+      const va = opts.personAspect
+      const ca = opts.canvasAspect
+      if (ca > va) sy = va / ca
+      else sx = ca / va
+    }
+
+    // 4. силуэтная контактная тень — ПЕРЕД фигурой (фигура закроет её везде,
+    // кроме зоны у ступней → мягкое пятно по форме стоп, без привязки к ногам)
+    if (mirrorVisible && opts.toggles.shadow && opts.person) {
+      const g = this.groundShadowMat.uniforms
+      g.tVideo.value = opts.person
+      g.uUvScale.value.set(sx, sy)
+      g.uOpacity.value = opts.shadowStrength * opts.mirrorOpacity
+      this.pass(this.groundShadowMat, this.compositeRT)
     }
 
     // 5. фигура
@@ -419,15 +437,7 @@ export class LuxCompositor {
       u.uLutOn.value = opts.toggles.lut ? 1 : 0
       u.uWrapOn.value = opts.toggles.wrap ? 1 : 0
       u.uColorMatchOn.value = opts.toggles.colorMatch ? 1 : 0
-      // cover-fit: видео заполняет экран без искажений
-      if (opts.personAspect) {
-        const va = opts.personAspect
-        const ca = opts.canvasAspect
-        if (ca > va) u.uUvScale.value.set(1, va / ca)
-        else u.uUvScale.value.set(ca / va, 1)
-      } else {
-        u.uUvScale.value.set(1, 1)
-      }
+      u.uUvScale.value.set(sx, sy)
       this.pass(this.personMat, this.compositeRT)
     }
 

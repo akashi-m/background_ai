@@ -1,6 +1,8 @@
 {
   "title": "Гостиная",
-  "dollyMaxCm": 25,
+  "dollyMaxCm": 0,
+  "depthAmountCm": 0,
+  "flat": true,
   "format": "photo25d",
   "file": "photo.png",
   "depthFile": "depth.png",

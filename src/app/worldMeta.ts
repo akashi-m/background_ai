@@ -17,6 +17,7 @@ export interface WorldMeta {
   source?: string     // происхождение (marble:<id>, съёмка, ...)
   lut?: string           // .cube гармонизации интерьера (Lux)
   shadowStrength: number // плотность контактной тени 0..1 (Lux, дефолт 0.5)
+  flat?: boolean         // плоский плейт-фон зеркала: фото целиком, без параллакс-кропа
 }
 
 const DEFAULT_TRANSFORM: WorldTransform = { position: [0, 0, 0], rotationYDeg: 0, scale: 1 }
@@ -89,5 +90,6 @@ export function parseWorldMeta(json: unknown, worldName: string): WorldMeta {
     source: typeof j.source === 'string' ? j.source : undefined,
     lut,
     shadowStrength,
+    flat: j.flat === true,
   }
 }

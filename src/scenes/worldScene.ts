@@ -72,14 +72,18 @@ export async function buildWorld(
       throw new Error(`Не загрузился ассет: ${url} (${e instanceof Error ? e.message : String(e)})`)
     }
   } else {
-    const depthAmountCm = loadDepthOverride(name) ?? meta.depthAmountCm ?? 60
-    const fit = fitCoverCm(meta.aspect!, -60, screenWcm, screenHcm)
+    // flat: плоский плейт-фон зеркала — плоскость в плоскости экрана (z=0),
+    // без overscan и без 2.5D-смещения → фото показывается целиком, без кропа.
+    const flat = meta.flat === true
+    const zCm = flat ? 0 : -60
+    const depthAmountCm = flat ? 0 : (loadDepthOverride(name) ?? meta.depthAmountCm ?? 60)
+    const fit = fitCoverCm(meta.aspect!, zCm, screenWcm, screenHcm, flat ? 1.0 : 1.35)
     const mesh = await makeDepthPhotoMesh({
       photoUrl: baseUrl + meta.file,
       depthUrl: baseUrl + meta.depthFile!,
       widthCm: fit.widthCm,
       heightCm: fit.heightCm,
-      zCm: -60,
+      zCm,
       depthAmountCm,
     })
     root.add(mesh)

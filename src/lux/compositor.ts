@@ -45,6 +45,7 @@ export class LuxCompositor {
   private wrapRT_B: THREE.WebGLRenderTarget
   private meanRT: THREE.WebGLRenderTarget // 1×1 — средний цвет сцены (цвет-матч)
   private compositeRT: THREE.WebGLRenderTarget // весь композит до зерна
+  private shadowRT: THREE.WebGLRenderTarget // целевой RT физической тени (read+write split)
   private ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
   private passScene = new THREE.Scene()
   private passMeshes = new Map<THREE.Material, THREE.Mesh>() // кэш — без аллокаций в кадре
@@ -57,6 +58,7 @@ export class LuxCompositor {
   private slideMat: THREE.ShaderMaterial
   private personMat: THREE.ShaderMaterial
   private groundShadowMat: THREE.ShaderMaterial // силуэтная контактная тень у ног
+  private roomShadowMat: THREE.ShaderMaterial // физическая тень по мировым координатам комнаты
   private fadeMat: THREE.MeshBasicMaterial
 
   constructor(
@@ -73,6 +75,7 @@ export class LuxCompositor {
     this.wrapRT_B = new THREE.WebGLRenderTarget(width >> 2, height >> 2)
     this.meanRT = new THREE.WebGLRenderTarget(1, 1)
     this.compositeRT = new THREE.WebGLRenderTarget(width, height)
+    this.shadowRT = new THREE.WebGLRenderTarget(width, height)
 
     this.blitMat = new THREE.ShaderMaterial({
       uniforms: { tSrc: { value: null } },
@@ -312,6 +315,72 @@ export class LuxCompositor {
       `,
     })
 
+    // Физическая тень: для каждого пикселя комнаты знаем его МИРОВУЮ 3D-позицию
+    // (запечённая EXR worldPos). Кастуем луч из этой точки к каждой лампе; если
+    // луч пересекает силуэт-билборд человека (плоскость в точке ног F, высотой H,
+    // лицом к камере) — пиксель в тени → затемняем фон. Ложится корректно на пол,
+    // мебель и стены по их реальной глубине.
+    this.roomShadowMat = new THREE.ShaderMaterial({
+      transparent: true, depthTest: false, glslVersion: THREE.GLSL3,
+      uniforms: {
+        tBg: { value: null }, tWorld: { value: null }, tVideo: { value: null },
+        uUvScale: { value: new THREE.Vector2(1, 1) },
+        uPersonUvScale: { value: new THREE.Vector2(1, 1) },
+        uF: { value: new THREE.Vector3() }, uH: { value: 1.7 },
+        uCamPos: { value: new THREE.Vector3() },
+        uLamp0: { value: new THREE.Vector3() }, uLamp1: { value: new THREE.Vector3() }, uLamp2: { value: new THREE.Vector3() },
+        uW: { value: new THREE.Vector3(1, 0, 0) },
+        uStrength: { value: 0.55 }, uBias: { value: 0.03 },
+        uOpacity: { value: 0 }, uNLamps: { value: 0 },
+      },
+      vertexShader: VERT3,
+      fragmentShader: /* glsl */ `
+        precision highp float;
+        in vec2 vUv; out vec4 fragColor;
+        uniform sampler2D tBg, tWorld, tVideo;
+        uniform vec2 uUvScale, uPersonUvScale;
+        uniform vec3 uF, uCamPos, uLamp0, uLamp1, uLamp2, uW;
+        uniform float uH, uStrength, uBias, uOpacity, uNLamps;
+
+        float silAlpha(vec3 P) {
+          vec3 n = normalize(vec3(uCamPos.xy - uF.xy, 0.0));   // нормаль билборда (к камере, горизонт.)
+          vec3 tang = normalize(cross(vec3(0.0, 0.0, 1.0), n)); // касательная (вбок)
+          float u = dot(P - uF, tang);
+          float v = (P.z - uF.z) / max(uH, 0.01);              // 0 ступни .. 1 макушка
+          if (v < 0.0 || v > 1.0) return 0.0;
+          float halfW = uH * (uPersonUvScale.x / max(uPersonUvScale.y, 0.01)) * 0.5;
+          float su = clamp(0.5 + u / max(2.0 * halfW, 0.01), 0.0, 1.0);
+          vec2 puv = (vec2(su, v) - 0.5) * uPersonUvScale + 0.5;
+          vec2 m = vec2(1.0 - puv.x, puv.y);
+          return texture(tVideo, vec2(0.5 + m.x * 0.5, m.y)).r;
+        }
+
+        float shadowFromLamp(vec3 Pw, vec3 L) {
+          vec3 n = normalize(vec3(uCamPos.xy - uF.xy, 0.0));
+          vec3 dir = L - Pw;
+          float denom = dot(dir, n);
+          if (abs(denom) < 1e-4) return 0.0;
+          float tHit = dot(uF - Pw, n) / denom;
+          if (tHit <= uBias || tHit >= 1.0) return 0.0;
+          vec3 hit = Pw + dir * tHit;
+          return silAlpha(hit);
+        }
+
+        void main() {
+          vec3 bg = texture(tBg, vUv).rgb;
+          vec2 wuv = (vUv - 0.5) * uUvScale + 0.5;
+          vec3 Pw = texture(tWorld, wuv).rgb;
+          float s = 0.0;
+          if (uNLamps > 0.5) s += shadowFromLamp(Pw, uLamp0) * uW.x;
+          if (uNLamps > 1.5) s += shadowFromLamp(Pw, uLamp1) * uW.y;
+          if (uNLamps > 2.5) s += shadowFromLamp(Pw, uLamp2) * uW.z;
+          s = clamp(s, 0.0, 1.0);
+          bg *= (1.0 - uStrength * s * uOpacity);
+          fragColor = vec4(bg, 1.0);
+        }
+      `,
+    })
+
     this.fadeMat = new THREE.MeshBasicMaterial({
       color: 0x000000, transparent: true, opacity: 0, depthTest: false,
     })
@@ -322,6 +391,7 @@ export class LuxCompositor {
     this.wrapRT_A.setSize(width >> 2, height >> 2)
     this.wrapRT_B.setSize(width >> 2, height >> 2)
     this.compositeRT.setSize(width, height)
+    this.shadowRT.setSize(width, height)
   }
 
   private pass(mat: THREE.Material, target: THREE.WebGLRenderTarget | null): void {
@@ -351,6 +421,9 @@ export class LuxCompositor {
     mirrorOpacity: number
     shadow: ShadowEllipse | null
     shadowStrength: number
+    shadowData: { lamps: { pos: [number, number, number]; weight: number }[]; worldPos: THREE.Texture; floorZ: number; cameraPos: [number, number, number] } | null
+    personFloor: { F: [number, number, number]; H: number } | null
+    shadowCfg: { strength: number; softness: number; bias: number }
     lut: THREE.Data3DTexture
     lutSize: number
     toggles: HarmonizeToggles
@@ -424,15 +497,42 @@ export class LuxCompositor {
       else sx = ca / va
     }
 
-    // 4. силуэтная контактная тень — ПЕРЕД фигурой (фигура закроет её везде,
-    // кроме зоны у ступней → мягкое пятно по форме стоп, без привязки к ногам)
+    // 4. тень: физическая (по мировым координатам комнаты) или фолбэк-силуэт.
+    // Физический пасс читает compositeRT (там уже лежит фон), пишет в shadowRT,
+    // затем блитит shadowRT обратно в compositeRT (read+write одного RT недопустим).
+    // Фолбэк — силуэтная контактная тень ПЕРЕД фигурой (фигура закроет её везде,
+    // кроме зоны у ступней → мягкое пятно по форме стоп, без привязки к ногам).
     if (mirrorVisible && opts.toggles.shadow && opts.person) {
-      const g = this.groundShadowMat.uniforms
-      g.tVideo.value = opts.person
-      g.uUvScale.value.set(sx, sy)
-      g.uOpacity.value = opts.shadowStrength * opts.mirrorOpacity
-      g.uLightX.value = opts.lightDirX * 0.015 // лёгкий снос по ключу (реальная почти вертикальна)
-      this.pass(this.groundShadowMat, this.compositeRT)
+      if (opts.shadowData && opts.personFloor) {
+        const u = this.roomShadowMat.uniforms
+        u.tBg.value = this.compositeRT.texture
+        u.tWorld.value = opts.shadowData.worldPos
+        u.tVideo.value = opts.person
+        u.uUvScale.value.copy(this.coverMat.uniforms.uUvScale.value)
+        u.uPersonUvScale.value.set(sx, sy)
+        u.uF.value.set(opts.personFloor.F[0], opts.personFloor.F[1], opts.personFloor.F[2])
+        u.uH.value = opts.personFloor.H
+        u.uCamPos.value.set(opts.shadowData.cameraPos[0], opts.shadowData.cameraPos[1], opts.shadowData.cameraPos[2])
+        const lamps = opts.shadowData.lamps
+        u.uNLamps.value = Math.min(3, lamps.length)
+        if (lamps[0]) u.uLamp0.value.set(lamps[0].pos[0], lamps[0].pos[1], lamps[0].pos[2])
+        if (lamps[1]) u.uLamp1.value.set(lamps[1].pos[0], lamps[1].pos[1], lamps[1].pos[2])
+        if (lamps[2]) u.uLamp2.value.set(lamps[2].pos[0], lamps[2].pos[1], lamps[2].pos[2])
+        u.uW.value.set(lamps[0]?.weight ?? 0, lamps[1]?.weight ?? 0, lamps[2]?.weight ?? 0)
+        u.uStrength.value = opts.shadowCfg.strength
+        u.uBias.value = opts.shadowCfg.bias
+        u.uOpacity.value = opts.mirrorOpacity
+        this.pass(this.roomShadowMat, this.shadowRT)
+        this.blitMat.uniforms.tSrc.value = this.shadowRT.texture
+        this.pass(this.blitMat, this.compositeRT)
+      } else {
+        const g = this.groundShadowMat.uniforms
+        g.tVideo.value = opts.person
+        g.uUvScale.value.set(sx, sy)
+        g.uOpacity.value = opts.shadowStrength * opts.mirrorOpacity
+        g.uLightX.value = opts.lightDirX * 0.015 // лёгкий снос по ключу (реальная почти вертикальна)
+        this.pass(this.groundShadowMat, this.compositeRT)
+      }
     }
 
     // 5. фигура

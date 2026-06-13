@@ -17,6 +17,7 @@ import { LuxCompositor, type HarmonizeToggles } from './lux/compositor'
 import { IdleSlides } from './lux/idle'
 import { loadLutTexture } from './lux/lut'
 import { shadowFromBbox, SmoothedShadow } from './lux/shadow'
+import { personFloorWorld } from './lux/shadowGeom'
 import { parseDevFlags } from './lux/devFlags'
 import { LuxUI, interiorLabels } from './lux/ui'
 
@@ -133,6 +134,10 @@ async function start() {
 
   const camera = new THREE.PerspectiveCamera()
 
+  // физическая тень: сглаженные точка ног F и рост H посетителя в мире
+  let smoothF: [number, number, number] | null = null
+  let smoothH = 1.7
+
   let last = performance.now()
   renderer.setAnimationLoop((now) => {
     const dt = Math.min((now - last) / 1000, 0.1)
@@ -163,6 +168,26 @@ async function start() {
       : null
     const shadow = shadowSmooth.update(shadowTarget, dt)
 
+    // точка ног посетителя в мире (для физической тени) — со сглаживанием F/H;
+    // mirror-X центра bbox, как делает существующая силуэтная тень
+    const sd = active.shadowData
+    let personFloor: { F: [number, number, number]; H: number } | null = null
+    if (sd && healthy && t?.bbox && t.distanceCm != null) {
+      const [x0, y0, x1, y1] = t.bbox
+      const cur = personFloorWorld(
+        { distanceCm: t.distanceCm, bboxCx: 1 - (x0 + x1) / 2, bboxH: y1 - y0 },
+        sd.camera, sd.floorZ,
+      )
+      const k = 1 - Math.exp(-dt * 8)
+      smoothF = smoothF
+        ? [smoothF[0] + (cur.F[0] - smoothF[0]) * k, smoothF[1] + (cur.F[1] - smoothF[1]) * k, cur.F[2]]
+        : cur.F
+      smoothH = smoothH + (cur.H - smoothH) * k
+      personFloor = { F: smoothF, H: smoothH }
+    } else {
+      smoothF = null
+    }
+
     compositor.render({
       scene: active.scene,
       camera,
@@ -174,6 +199,14 @@ async function start() {
       mirrorOpacity: experience.mirrorOpacity,
       shadow,
       shadowStrength: active.meta.shadowStrength,
+      shadowData: active.shadowData ? {
+        lamps: active.shadowData.lamps,
+        worldPos: active.shadowData.worldPos,
+        floorZ: active.shadowData.floorZ,
+        cameraPos: active.shadowData.camera.pos,
+      } : null,
+      personFloor,
+      shadowCfg: LUX_CONFIG.shadow,
       lut: luts[switcher.index],
       lutSize: luts[switcher.index].image.width,
       toggles,

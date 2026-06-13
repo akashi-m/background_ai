@@ -281,7 +281,7 @@ export class LuxCompositor {
         uUvScale: { value: new THREE.Vector2(1, 1) },
         uUvOffset: { value: new THREE.Vector2(0, 0) },
         uOpacity: { value: 0 },
-        uDrop: { value: 0.03 },   // сдвиг тени вниз по экрану (доля высоты)
+        uDrop: { value: 0.022 },  // тугая лужа у ступней (эталон: проекс-рендер)
         uLightX: { value: 0.0 },  // снос вбок (верхний свет → ~0)
       },
       vertexShader: VERT3,
@@ -305,7 +305,7 @@ export class LuxCompositor {
           float a = 0.0;
           for (int y = -2; y <= 2; y++)
             for (int x = -2; x <= 2; x++)
-              a += sampleA(base + vec2(float(x), float(y)) * 0.005);
+              a += sampleA(base + vec2(float(x), float(y)) * 0.008); // мягче край
           a /= 25.0;
           fragColor = vec4(0.0, 0.0, 0.0, a * uOpacity);
         }
@@ -431,7 +431,7 @@ export class LuxCompositor {
       g.tVideo.value = opts.person
       g.uUvScale.value.set(sx, sy)
       g.uOpacity.value = opts.shadowStrength * opts.mirrorOpacity
-      g.uLightX.value = opts.lightDirX * 0.04 // ключ слева → тень вправо
+      g.uLightX.value = opts.lightDirX * 0.015 // лёгкий снос по ключу (реальная почти вертикальна)
       this.pass(this.groundShadowMat, this.compositeRT)
     }
 

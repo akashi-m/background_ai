@@ -12,4 +12,4 @@ def make_source(cfg: CaptureConfig) -> FrameSource:
         return FileSource(cfg.file_path)
     if cfg.source == "zed":
         return ZedSource()
-    return WebcamSource(cfg.camera_index, cfg.width, cfg.height)
+    return WebcamSource(cfg.camera_index, cfg.width, cfg.height, cfg.rotate)

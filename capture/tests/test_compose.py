@@ -1,6 +1,33 @@
 import numpy as np
 
-from capture.compose import pack_sbs, shape_alpha, unpack_sbs
+from capture.compose import pack_sbs, rotate_frame, shape_alpha, unpack_sbs
+
+
+def test_rotate_frame_90_swaps_dims_clockwise() -> None:
+    img = np.zeros((4, 6, 3), dtype=np.uint8)
+    img[0, 0] = (255, 0, 0)              # маркер: верх-лево
+    r = rotate_frame(img, 90)            # по часовой
+    assert r.shape == (6, 4, 3)          # H↔W поменялись
+    assert tuple(r[0, -1]) == (255, 0, 0)  # верх-лево → верх-право при CW 90
+
+
+def test_rotate_frame_0_identity_and_180_involution() -> None:
+    img = np.arange(4 * 6 * 3, dtype=np.uint8).reshape(4, 6, 3)
+    assert np.array_equal(rotate_frame(img, 0), img)
+    assert rotate_frame(img, 180).shape == (4, 6, 3)
+    assert np.array_equal(rotate_frame(rotate_frame(img, 180), 180), img)
+
+
+def test_rotate_frame_270_is_inverse_of_90() -> None:
+    img = np.arange(4 * 6 * 3, dtype=np.uint8).reshape(4, 6, 3)
+    assert np.array_equal(rotate_frame(rotate_frame(img, 90), 270), img)
+
+
+def test_rotate_frame_bad_deg() -> None:
+    import pytest
+
+    with pytest.raises(ValueError):
+        rotate_frame(np.zeros((2, 2, 3), np.uint8), 45)
 
 
 def test_shape_alpha_endpoints_and_monotonic() -> None:

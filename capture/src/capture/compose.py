@@ -3,6 +3,16 @@
 import numpy as np
 
 
+def rotate_frame(rgb: np.ndarray, deg: int) -> np.ndarray:
+    """Поворот кадра ПО ЧАСОВОЙ на deg ∈ {0,90,180,270} (Iriun в портрете)."""
+    if deg not in (0, 90, 180, 270):
+        raise ValueError(f"--rotate допускает 0/90/180/270, не {deg}")
+    if deg == 0:
+        return rgb
+    # np.rot90 крутит против часовой; CW deg = CCW (360-deg)
+    return np.ascontiguousarray(np.rot90(rgb, (360 - deg) // 90))
+
+
 def shape_alpha(alpha: np.ndarray, lo: float, hi: float) -> np.ndarray:
     """smoothstep(lo, hi, alpha) — поджатие полупрозрачной полосы края.
 

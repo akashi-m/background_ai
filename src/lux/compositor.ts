@@ -325,7 +325,7 @@ export class LuxCompositor {
       uniforms: {
         tBg: { value: null }, tWorld: { value: null }, tVideo: { value: null },
         uUvScale: { value: new THREE.Vector2(1, 1) },
-        uPersonUvScale: { value: new THREE.Vector2(1, 1) },
+        uVideoAspect: { value: 0.5625 },
         uF: { value: new THREE.Vector3() }, uH: { value: 1.7 },
         uCamPos: { value: new THREE.Vector3() },
         uLamp0: { value: new THREE.Vector3() }, uLamp1: { value: new THREE.Vector3() }, uLamp2: { value: new THREE.Vector3() },
@@ -338,9 +338,9 @@ export class LuxCompositor {
         precision highp float;
         in vec2 vUv; out vec4 fragColor;
         uniform sampler2D tBg, tWorld, tVideo;
-        uniform vec2 uUvScale, uPersonUvScale;
+        uniform vec2 uUvScale;
         uniform vec3 uF, uCamPos, uLamp0, uLamp1, uLamp2, uW;
-        uniform float uH, uStrength, uBias, uOpacity, uNLamps;
+        uniform float uH, uStrength, uBias, uOpacity, uNLamps, uVideoAspect;
 
         float silAlpha(vec3 P) {
           vec3 n = normalize(vec3(uCamPos.xy - uF.xy, 0.0));   // нормаль билборда (к камере, горизонт.)
@@ -348,11 +348,10 @@ export class LuxCompositor {
           float u = dot(P - uF, tang);
           float v = (P.z - uF.z) / max(uH, 0.01);              // 0 ступни .. 1 макушка
           if (v < 0.0 || v > 1.0) return 0.0;
-          float halfW = uH * (uPersonUvScale.x / max(uPersonUvScale.y, 0.01)) * 0.5;
+          float halfW = uH * uVideoAspect * 0.5;               // ширина билборда = рост × аспект
           float su = clamp(0.5 + u / max(2.0 * halfW, 0.01), 0.0, 1.0);
-          vec2 puv = (vec2(su, v) - 0.5) * uPersonUvScale + 0.5;
-          vec2 m = vec2(1.0 - puv.x, puv.y);
-          return texture(tVideo, vec2(0.5 + m.x * 0.5, m.y)).r;
+          vec2 m = vec2(1.0 - su, v);                          // зеркальный флип как у фигуры
+          return texture(tVideo, vec2(0.5 + m.x * 0.5, m.y)).r; // правая половина SBS = альфа
         }
 
         float shadowFromLamp(vec3 Pw, vec3 L) {
@@ -509,7 +508,7 @@ export class LuxCompositor {
         u.tWorld.value = opts.shadowData.worldPos
         u.tVideo.value = opts.person
         u.uUvScale.value.copy(this.coverMat.uniforms.uUvScale.value)
-        u.uPersonUvScale.value.set(sx, sy)
+        u.uVideoAspect.value = opts.personAspect ?? 0.5625
         u.uF.value.set(opts.personFloor.F[0], opts.personFloor.F[1], opts.personFloor.F[2])
         u.uH.value = opts.personFloor.H
         u.uCamPos.value.set(opts.shadowData.cameraPos[0], opts.shadowData.cameraPos[1], opts.shadowData.cameraPos[2])

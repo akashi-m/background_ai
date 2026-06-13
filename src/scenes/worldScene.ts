@@ -108,15 +108,24 @@ export async function buildWorld(
 
     // физическая тень (Lux): лампы/камера из lights.json + карта world-position (EXR)
     if (meta.shadow) {
-      const lights = await (await fetch(baseUrl + meta.shadow.lightsFile)).json()
-      const worldPos = await new EXRLoader().loadAsync(baseUrl + meta.shadow.worldPosFile)
-      worldPos.minFilter = THREE.NearestFilter
-      worldPos.magFilter = THREE.NearestFilter
-      built.shadowData = {
-        lamps: lights.lamps,
-        camera: lights.camera,
-        floorZ: lights.floorZ,
-        worldPos,
+      try {
+        const res = await fetch(baseUrl + meta.shadow.lightsFile)
+        if (!res.ok) throw new Error(`lights ${res.status}`)
+        const lights = await res.json()
+        const lamps = lights.lamps as { pos: [number, number, number]; weight: number }[]
+        const wsum = lamps.reduce((s, l) => s + l.weight, 0) || 1
+        lamps.forEach((l) => { l.weight = l.weight / wsum })
+        const worldPos = await new EXRLoader().loadAsync(baseUrl + meta.shadow.worldPosFile)
+        worldPos.minFilter = THREE.NearestFilter
+        worldPos.magFilter = THREE.NearestFilter
+        built.shadowData = {
+          lamps,
+          camera: lights.camera,
+          floorZ: lights.floorZ,
+          worldPos,
+        }
+      } catch (e) {
+        console.warn(`мир «${name}»: shadowData не загружена (${e instanceof Error ? e.message : e}); тень-фолбэк`)
       }
     }
   }

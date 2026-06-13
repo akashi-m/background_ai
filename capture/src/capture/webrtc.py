@@ -8,6 +8,19 @@ from av import VideoFrame
 from capture.server import PipelineLike
 
 
+def configure_bitrate(mbps: float) -> None:
+    """Прижать битрейт VP8 к целевому (MIN=DEFAULT=MAX).
+
+    Сервер на loopback (127.0.0.1) — congestion-control не нужен; фиксируем
+    битрейт, чтобы картинка стартовала резкой и не падала от заниженных
+    REMB-оценок. Глобалы читаются энкодером в момент вызова → ставим до offer.
+    """
+    import aiortc.codecs.vpx as vpx
+
+    bits = int(mbps * 1_000_000)
+    vpx.MIN_BITRATE = vpx.DEFAULT_BITRATE = vpx.MAX_BITRATE = bits
+
+
 class SbsTrack(VideoStreamTrack):
     """Отдаёт последний SBS-кадр пайплайна; нет кадра — чёрный (рендерер в IDLE)."""
 

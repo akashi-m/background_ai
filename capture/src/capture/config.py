@@ -17,6 +17,7 @@ class CaptureConfig(BaseModel):
     height: int = 720
     port: int = 8765             # aiohttp: /offer /ws /viewer /health
     models_dir: str = "models"   # куда скачаны модели (scripts/get-models.sh)
+    bitrate_mbps: float = 8.0    # битрейт VP8 (loopback): резкость live-композита
 
 
 def parse_args(argv: list[str] | None = None) -> CaptureConfig:
@@ -33,6 +34,8 @@ def parse_args(argv: list[str] | None = None) -> CaptureConfig:
     p.add_argument("--height", type=int, default=720)
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("--models-dir", default="models")
+    p.add_argument("--bitrate", type=float, default=8.0,
+                   help="битрейт VP8 в Мбит/с (loopback): выше = резче live-картинка")
     a = p.parse_args(argv)
 
     source, file_path = a.source, ""
@@ -49,5 +52,5 @@ def parse_args(argv: list[str] | None = None) -> CaptureConfig:
         source=source, file_path=file_path, camera_index=a.camera_index,
         engine=a.engine, model=a.model, ratio=a.ratio,
         width=a.width, height=a.height,
-        port=a.port, models_dir=a.models_dir,
+        port=a.port, models_dir=a.models_dir, bitrate_mbps=a.bitrate,
     )

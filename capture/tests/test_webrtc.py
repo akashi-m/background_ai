@@ -6,7 +6,20 @@ from aiortc import RTCPeerConnection
 
 from capture.pipeline import PipelineStats
 from capture.presence import PresenceState
-from capture.webrtc import handle_offer
+from capture.webrtc import configure_bitrate, handle_offer
+
+
+def test_configure_bitrate_pins_vpx_bounds() -> None:
+    import aiortc.codecs.vpx as vpx
+
+    saved = (vpx.MIN_BITRATE, vpx.DEFAULT_BITRATE, vpx.MAX_BITRATE)
+    try:
+        configure_bitrate(8.0)
+        assert vpx.MIN_BITRATE == 8_000_000
+        assert vpx.DEFAULT_BITRATE == 8_000_000
+        assert vpx.MAX_BITRATE == 8_000_000
+    finally:
+        vpx.MIN_BITRATE, vpx.DEFAULT_BITRATE, vpx.MAX_BITRATE = saved
 
 
 class FakePipeline:

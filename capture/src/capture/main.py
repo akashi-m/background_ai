@@ -37,6 +37,11 @@ def main(argv: list[str] | None = None) -> None:
         print(f"источник: {e}", file=sys.stderr)
         raise SystemExit(2) from e
     engine = make_engine(cfg)
+
+    from capture.webrtc import configure_bitrate
+
+    configure_bitrate(cfg.bitrate_mbps)  # до первого offer: энкодер читает глобалы
+
     pipeline = Pipeline(source, engine, PresenceConfig())
     pipeline.start()
 
@@ -46,7 +51,7 @@ def main(argv: list[str] | None = None) -> None:
         pipeline.stop()
 
     app.on_cleanup.append(_cleanup)
-    print(f"capture: источник={cfg.source} движок={cfg.engine}")
+    print(f"capture: источник={cfg.source} движок={cfg.engine} битрейт={cfg.bitrate_mbps}Мбит/с")
     print(f"viewer:  http://localhost:{cfg.port}/viewer")
     web.run_app(app, host="127.0.0.1", port=cfg.port)
 

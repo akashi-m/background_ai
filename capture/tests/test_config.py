@@ -49,6 +49,12 @@ def test_parse_args_bad_model() -> None:
         parse_args(["--model", "transformer9000"])
 
 
+def test_bitrate_default_and_parse() -> None:
+    assert CaptureConfig().bitrate_mbps == 8.0
+    cfg = parse_args(["--bitrate", "20"])
+    assert cfg.bitrate_mbps == 20.0
+
+
 def test_parse_args_ratio_out_of_range() -> None:
     import pytest
 

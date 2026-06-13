@@ -78,3 +78,18 @@ describe('parseWorldMeta', () => {
     expect(() => parseWorldMeta({ ...VALID_PHOTO, lut: 7 }, 'b')).toThrow(/b/)
   })
 })
+
+describe('worldMeta shadow', () => {
+  it('парсит shadow-файлы', () => {
+    const m = parseWorldMeta({
+      title: 'x', format: 'photo25d', file: 'p.png', depthFile: 'd.png', aspect: 0.5625,
+      shadow: { lightsFile: 'lights.json', worldPosFile: 'roomworld.exr' },
+    }, 'x')
+    expect(m.shadow?.lightsFile).toBe('lights.json')
+    expect(m.shadow?.worldPosFile).toBe('roomworld.exr')
+  })
+  it('без shadow → undefined', () => {
+    const m = parseWorldMeta({ title: 'x', format: 'photo25d', file: 'p.png', depthFile: 'd.png', aspect: 1 }, 'x')
+    expect(m.shadow).toBeUndefined()
+  })
+})

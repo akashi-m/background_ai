@@ -19,6 +19,7 @@ export interface WorldMeta {
   shadowStrength: number // плотность контактной тени 0..1 (Lux, дефолт 0.5)
   flat?: boolean         // плоский плейт-фон зеркала: фото целиком, без параллакс-кропа
   lightDirX?: number     // направление ключевого света интерьера по X экрана: -1 слева, +1 справа, 0 сверху
+  shadow?: { lightsFile: string; worldPosFile: string } // физическая тень (Lux): лампы+камера + карта world-position
 }
 
 const DEFAULT_TRANSFORM: WorldTransform = { position: [0, 0, 0], rotationYDeg: 0, scale: 1 }
@@ -79,6 +80,14 @@ export function parseWorldMeta(json: unknown, worldName: string): WorldMeta {
     shadowStrength = j.shadowStrength
   }
 
+  let shadow: WorldMeta['shadow']
+  if (j.shadow && typeof j.shadow === 'object' && !Array.isArray(j.shadow)) {
+    const s = j.shadow as Record<string, unknown>
+    if (typeof s.lightsFile === 'string' && typeof s.worldPosFile === 'string') {
+      shadow = { lightsFile: s.lightsFile, worldPosFile: s.worldPosFile }
+    }
+  }
+
   return {
     title: j.title,
     format: j.format,
@@ -93,5 +102,6 @@ export function parseWorldMeta(json: unknown, worldName: string): WorldMeta {
     shadowStrength,
     flat: j.flat === true,
     lightDirX: typeof j.lightDirX === 'number' && isFinite(j.lightDirX) ? j.lightDirX : 0,
+    shadow,
   }
 }

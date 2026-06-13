@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { EXRLoader } from 'three/examples/jsm/loaders/EXRLoader.js'
 import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark'
 import type { WorldMeta } from '../app/worldMeta'
 import { makeDepthPhotoMesh, fitCoverCm } from './depthPhoto'
@@ -17,6 +18,13 @@ export interface BuiltWorld {
   depthAmountCm?: number
   // flat-миры: текстура плейта для фуллскрин-блита фона зеркала (без 3D-камеры)
   backplate?: THREE.Texture
+  // физическая тень (Lux): лампы + камера + карта world-position для проекции теней
+  shadowData?: {
+    lamps: { pos: [number, number, number]; weight: number }[]
+    camera: import('../lux/shadowGeom').ShadowCamera
+    floorZ: number
+    worldPos: THREE.Texture
+  }
 }
 
 const DEPTH_KEY_PREFIX = 'stellar-mirror.depth.'
@@ -97,6 +105,20 @@ export async function buildWorld(
     }
     // flat: фон рисуется фуллскрин-блитом (без 3D-камеры/глаза → без зума)
     if (flat) built.backplate = mat.uniforms.uMap.value as THREE.Texture
+
+    // физическая тень (Lux): лампы/камера из lights.json + карта world-position (EXR)
+    if (meta.shadow) {
+      const lights = await (await fetch(baseUrl + meta.shadow.lightsFile)).json()
+      const worldPos = await new EXRLoader().loadAsync(baseUrl + meta.shadow.worldPosFile)
+      worldPos.minFilter = THREE.NearestFilter
+      worldPos.magFilter = THREE.NearestFilter
+      built.shadowData = {
+        lamps: lights.lamps,
+        camera: lights.camera,
+        floorZ: lights.floorZ,
+        worldPos,
+      }
+    }
   }
 
   return built

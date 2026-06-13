@@ -96,6 +96,9 @@ export class PersonStream {
         this.video.srcObject = new MediaStream([e.track])
         this.texture = new THREE.VideoTexture(this.video)
         // colorSpace не задаём: сырой sRGB камеры — то, что нужно (см. v1)
+        // Chrome может не стартовать autoplay для srcObject → видео висит 0×0,
+        // текстура пустая; играем явно (muted → политика пускает).
+        void this.video.play().catch(() => { /* стартует на жесте/следующем тике */ })
       }
       pc.onconnectionstatechange = () => {
         // Гард: событие старого соединения не должно трогать новое.

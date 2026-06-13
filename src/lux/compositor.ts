@@ -44,6 +44,7 @@ export class LuxCompositor {
   private wrapRT_A: THREE.WebGLRenderTarget
   private wrapRT_B: THREE.WebGLRenderTarget
   private meanRT: THREE.WebGLRenderTarget // 1×1 — средний цвет сцены (цвет-матч)
+  private compositeRT: THREE.WebGLRenderTarget // весь композит до зерна
   private ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
   private passScene = new THREE.Scene()
   private passMeshes = new Map<THREE.Material, THREE.Mesh>() // кэш — без аллокаций в кадре
@@ -51,6 +52,7 @@ export class LuxCompositor {
   private blitMat: THREE.ShaderMaterial
   private blurMat: THREE.ShaderMaterial
   private meanMat: THREE.ShaderMaterial
+  private grainMat: THREE.ShaderMaterial
   private slideMat: THREE.ShaderMaterial
   private shadowMat: THREE.ShaderMaterial
   private personMat: THREE.ShaderMaterial
@@ -69,6 +71,7 @@ export class LuxCompositor {
     this.wrapRT_A = new THREE.WebGLRenderTarget(width >> 2, height >> 2)
     this.wrapRT_B = new THREE.WebGLRenderTarget(width >> 2, height >> 2)
     this.meanRT = new THREE.WebGLRenderTarget(1, 1)
+    this.compositeRT = new THREE.WebGLRenderTarget(width, height)
 
     this.blitMat = new THREE.ShaderMaterial({
       uniforms: { tSrc: { value: null } },
@@ -114,6 +117,28 @@ export class LuxCompositor {
             }
           }
           gl_FragColor = vec4(acc / 64.0, 1.0);
+        }
+      `,
+      depthTest: false,
+    })
+
+    // финальное зерно на весь кадр: компонует composite → экран, добавляя шум
+    this.grainMat = new THREE.ShaderMaterial({
+      uniforms: {
+        tSrc: { value: null }, uGrain: { value: tuning.grainAmount },
+        uGrainOn: { value: 1 }, uTime: { value: 0 },
+      },
+      vertexShader: VERT,
+      fragmentShader: /* glsl */ `
+        varying vec2 vUv; uniform sampler2D tSrc;
+        uniform float uGrain; uniform float uGrainOn; uniform float uTime;
+        float hash(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7)) + uTime) * 43758.5453);
+        }
+        void main() {
+          vec3 c = texture2D(tSrc, vUv).rgb;
+          if (uGrainOn > 0.5) c += (hash(gl_FragCoord.xy) - 0.5) * uGrain;
+          gl_FragColor = vec4(c, 1.0);
         }
       `,
       depthTest: false,
@@ -179,13 +204,10 @@ export class LuxCompositor {
         uUvOffset: { value: new THREE.Vector2(0, 0) },
         uFeather: { value: new THREE.Vector2(tuning.feather[0], tuning.feather[1]) },
         uWrapStrength: { value: tuning.wrapStrength },
-        uGrain: { value: tuning.grainAmount },
         uCast: { value: tuning.colorMatch.cast },
         uExp: { value: tuning.colorMatch.exposure },
-        uTime: { value: 0 },
         uLutOn: { value: 1 },
         uWrapOn: { value: 1 },
-        uGrainOn: { value: 1 },
         uColorMatchOn: { value: 1 },
       },
       vertexShader: VERT3,
@@ -196,15 +218,11 @@ export class LuxCompositor {
         uniform sampler2D tVideo; uniform sampler3D tLut; uniform float uLutSize;
         uniform sampler2D tWrap; uniform sampler2D tMean;
         uniform float uOpacity; uniform vec2 uUvScale; uniform vec2 uUvOffset;
-        uniform vec2 uFeather; uniform float uWrapStrength; uniform float uGrain;
+        uniform vec2 uFeather; uniform float uWrapStrength;
         uniform float uCast; uniform float uExp;
-        uniform float uTime; uniform float uLutOn; uniform float uWrapOn; uniform float uGrainOn;
+        uniform float uLutOn; uniform float uWrapOn;
         uniform float uColorMatchOn;
         out vec4 fragColor;
-
-        float hash(vec2 p) {
-          return fract(sin(dot(p, vec2(127.1, 311.7)) + uTime) * 43758.5453);
-        }
 
         void main() {
           // cover-fit видео + зеркальный флип
@@ -240,10 +258,7 @@ export class LuxCompositor {
             rgb = mix(rgb, wrapC, uWrapStrength * edge);
           }
 
-          // зерно
-          if (uGrainOn > 0.5) {
-            rgb += (hash(gl_FragCoord.xy) - 0.5) * uGrain;
-          }
+          // зерно теперь финальным пассом на весь кадр (grainMat), не здесь
 
           fragColor = vec4(rgb, a * uOpacity);
         }
@@ -259,6 +274,7 @@ export class LuxCompositor {
     this.sceneRT.setSize(width, height)
     this.wrapRT_A.setSize(width >> 2, height >> 2)
     this.wrapRT_B.setSize(width >> 2, height >> 2)
+    this.compositeRT.setSize(width, height)
   }
 
   private pass(mat: THREE.Material, target: THREE.WebGLRenderTarget | null): void {
@@ -318,11 +334,13 @@ export class LuxCompositor {
       this.pass(this.meanMat, this.meanRT)
     }
 
-    // 2. на экран: мир-блит
+    // 2. слои композита собираем в compositeRT (зерно — финальным пассом)
+    this.renderer.setRenderTarget(this.compositeRT)
     this.renderer.clear()
+    this.renderer.setRenderTarget(null)
     if (mirrorVisible) {
       this.blitMat.uniforms.tSrc.value = this.sceneRT.texture
-      this.pass(this.blitMat, null)
+      this.pass(this.blitMat, this.compositeRT)
     }
 
     // 3. слайдшоу IDLE (кроссфейдится с зеркалом через visible)
@@ -331,7 +349,7 @@ export class LuxCompositor {
       this.slideMat.uniforms.tB.value = opts.slides.b ?? opts.slides.a
       this.slideMat.uniforms.uMix.value = opts.slides.mix
       this.slideMat.uniforms.uVisible.value = opts.slides.visible
-      this.pass(this.slideMat, null)
+      this.pass(this.slideMat, this.compositeRT)
     }
 
     // 4. контактная тень
@@ -355,7 +373,7 @@ export class LuxCompositor {
       this.shadowMat.uniforms.uR.value.set(sc.rx, sc.ry)
       this.shadowMat.uniforms.uOpacity.value =
         opts.shadow.opacity * opts.shadowStrength * opts.mirrorOpacity
-      this.pass(this.shadowMat, null)
+      this.pass(this.shadowMat, this.compositeRT)
     }
 
     // 5. фигура
@@ -367,10 +385,8 @@ export class LuxCompositor {
       u.tWrap.value = this.wrapRT_A.texture
       u.tMean.value = this.meanRT.texture
       u.uOpacity.value = opts.mirrorOpacity
-      u.uTime.value = opts.timeSec
       u.uLutOn.value = opts.toggles.lut ? 1 : 0
       u.uWrapOn.value = opts.toggles.wrap ? 1 : 0
-      u.uGrainOn.value = opts.toggles.grain ? 1 : 0
       u.uColorMatchOn.value = opts.toggles.colorMatch ? 1 : 0
       // cover-fit: видео заполняет экран без искажений
       if (opts.personAspect) {
@@ -381,10 +397,17 @@ export class LuxCompositor {
       } else {
         u.uUvScale.value.set(1, 1)
       }
-      this.pass(this.personMat, null)
+      this.pass(this.personMat, this.compositeRT)
     }
 
-    // 6. шторка смены миров
+    // 6. финальное зерно на весь кадр: compositeRT → экран
+    this.renderer.clear()
+    this.grainMat.uniforms.tSrc.value = this.compositeRT.texture
+    this.grainMat.uniforms.uGrainOn.value = opts.toggles.grain ? 1 : 0
+    this.grainMat.uniforms.uTime.value = opts.timeSec
+    this.pass(this.grainMat, null)
+
+    // 7. шторка смены миров (поверх зерна)
     if (opts.fade > 0.001) {
       this.fadeMat.opacity = opts.fade
       this.pass(this.fadeMat, null)

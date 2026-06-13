@@ -15,6 +15,8 @@ export interface BuiltWorld {
   // Живая ручка силы 2.5D-объёма (только photo25d; для сплатов undefined)
   setDepthAmount?: (cm: number) => void
   depthAmountCm?: number
+  // flat-миры: текстура плейта для фуллскрин-блита фона зеркала (без 3D-камеры)
+  backplate?: THREE.Texture
 }
 
 const DEPTH_KEY_PREFIX = 'stellar-mirror.depth.'
@@ -93,6 +95,8 @@ export async function buildWorld(
       mat.uniforms.uAmount.value = cm
       built.depthAmountCm = cm
     }
+    // flat: фон рисуется фуллскрин-блитом (без 3D-камеры/глаза → без зума)
+    if (flat) built.backplate = mat.uniforms.uMap.value as THREE.Texture
   }
 
   return built

@@ -53,6 +53,7 @@ export class LuxCompositor {
   private blurMat: THREE.ShaderMaterial
   private meanMat: THREE.ShaderMaterial
   private grainMat: THREE.ShaderMaterial
+  private coverMat: THREE.ShaderMaterial // flat-фон: cover-fit плейт без 3D-камеры
   private slideMat: THREE.ShaderMaterial
   private shadowMat: THREE.ShaderMaterial
   private personMat: THREE.ShaderMaterial
@@ -98,6 +99,21 @@ export class LuxCompositor {
             acc += texture2D(tSrc, vUv - off) * w[i];
           }
           gl_FragColor = acc;
+        }
+      `,
+      depthTest: false,
+    })
+
+    // flat-фон зеркала: cover-fit блит плейта (заполняет канвас без искажений),
+    // без 3D-камеры/eye → зум невозможен в принципе
+    this.coverMat = new THREE.ShaderMaterial({
+      uniforms: { tSrc: { value: null }, uUvScale: { value: new THREE.Vector2(1, 1) } },
+      vertexShader: VERT,
+      fragmentShader: /* glsl */ `
+        varying vec2 vUv; uniform sampler2D tSrc; uniform vec2 uUvScale;
+        void main() {
+          vec2 uv = (vUv - 0.5) * uUvScale + 0.5;
+          gl_FragColor = texture2D(tSrc, uv);
         }
       `,
       depthTest: false,
@@ -296,6 +312,8 @@ export class LuxCompositor {
   render(opts: {
     scene: THREE.Scene
     camera: THREE.Camera
+    backplate: THREE.Texture | null  // flat-мир: фуллскрин-фон вместо 3D-сцены
+    backplateAspect: number | null
     person: THREE.Texture | null
     personAspect: number | null
     mirrorOpacity: number
@@ -313,10 +331,23 @@ export class LuxCompositor {
 
     // 1. мир → RT (только когда зеркало видно)
     if (mirrorVisible) {
-      this.renderer.setRenderTarget(this.sceneRT)
-      this.renderer.clear() // RT обязан чиститься сам: глобальный autoClear=false
-      this.renderer.render(opts.scene, opts.camera)
-      this.renderer.setRenderTarget(null)
+      if (opts.backplate) {
+        // flat-фон: cover-fit блит плейта в sceneRT (без 3D-камеры → без зума)
+        const ca = opts.canvasAspect
+        const ta = opts.backplateAspect ?? ca
+        if (ca > ta) this.coverMat.uniforms.uUvScale.value.set(1, ta / ca)
+        else this.coverMat.uniforms.uUvScale.value.set(ca / ta, 1)
+        this.coverMat.uniforms.tSrc.value = opts.backplate
+        this.renderer.setRenderTarget(this.sceneRT)
+        this.renderer.clear()
+        this.renderer.setRenderTarget(null)
+        this.pass(this.coverMat, this.sceneRT)
+      } else {
+        this.renderer.setRenderTarget(this.sceneRT)
+        this.renderer.clear() // RT обязан чиститься сам: глобальный autoClear=false
+        this.renderer.render(opts.scene, opts.camera)
+        this.renderer.setRenderTarget(null)
+      }
 
       // блюр для light wrap: RT → A (даунскейл блитом) → B (гориз.) → A (верт.)
       this.blitMat.uniforms.tSrc.value = this.sceneRT.texture

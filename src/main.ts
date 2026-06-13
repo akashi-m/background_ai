@@ -166,6 +166,8 @@ async function start() {
     compositor.render({
       scene: active.scene,
       camera,
+      backplate: active.backplate ?? null,
+      backplateAspect: active.meta.aspect ?? null,
       person: person.texture,
       personAspect: person.videoAspect,
       mirrorOpacity: experience.mirrorOpacity,

@@ -57,7 +57,10 @@ async def _ws(request: web.Request) -> web.WebSocketResponse:
     await ws.prepare(request)
     try:
         while not ws.closed:
-            await ws.send_str(_telemetry_json(pipeline.stats()))
+            try:
+                await ws.send_str(_telemetry_json(pipeline.stats()))
+            except (ConnectionResetError, ConnectionError):
+                break  # клиент (вкладка) закрылся между тиками — выходим тихо
             try:
                 msg = await asyncio.wait_for(ws.receive(), timeout=1.0 / hz)
                 if msg.type in (WSMsgType.CLOSE, WSMsgType.CLOSING, WSMsgType.ERROR):

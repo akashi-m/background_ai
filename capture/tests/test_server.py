@@ -62,6 +62,20 @@ async def test_viewer_served(client) -> None:
     assert "text/html" in resp.headers["Content-Type"]
 
 
+async def test_cors_header_present(client) -> None:
+    """Рендерер на 5173 должен достучаться до capture на 8765 (loopback)."""
+    resp = await client.get("/health")
+    assert resp.headers["Access-Control-Allow-Origin"] == "*"
+
+
+async def test_cors_preflight_offer(client) -> None:
+    """POST /offer с JSON → браузер шлёт OPTIONS-preflight; отвечаем 200 + заголовки."""
+    resp = await client.options("/offer")
+    assert resp.status == 200
+    assert resp.headers["Access-Control-Allow-Origin"] == "*"
+    assert "POST" in resp.headers["Access-Control-Allow-Methods"]
+
+
 async def test_frame_png(client) -> None:
     resp = await client.get("/frame.png")
     assert resp.status == 200

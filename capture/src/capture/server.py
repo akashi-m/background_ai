@@ -123,6 +123,26 @@ async def _offer(request: web.Request) -> web.Response:
     return web.json_response({"sdp": local.sdp, "type": local.type})
 
 
+@web.middleware
+async def _cors(request: web.Request, handler: object) -> web.StreamResponse:
+    """CORS для loopback: рендерер (vite :5173) → capture (:8765) — разные origin.
+
+    Сервер слушает только 127.0.0.1, поэтому `*` безопасен. OPTIONS-preflight
+    (его шлёт браузер перед POST /offer с JSON) замыкаем сразу, не доводя до
+    роутера (иначе 405). WebSocket-ответ не трогаем — заголовки уже отправлены.
+    """
+    if request.method == "OPTIONS":
+        resp: web.StreamResponse = web.Response(status=200)
+    else:
+        resp = await handler(request)  # type: ignore[operator]
+        if isinstance(resp, web.WebSocketResponse):
+            return resp
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return resp
+
+
 async def _on_shutdown(app: web.Application) -> None:
     for pc in set(app["pcs"]):
         await pc.close()
@@ -130,7 +150,7 @@ async def _on_shutdown(app: web.Application) -> None:
 
 
 def build_app(pipeline: PipelineLike, telemetry_hz: int = 15) -> web.Application:
-    app = web.Application()
+    app = web.Application(middlewares=[_cors])
     app["pipeline"] = pipeline
     app["telemetry_hz"] = telemetry_hz
     app["pcs"] = set()

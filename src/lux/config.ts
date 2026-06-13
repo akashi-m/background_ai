@@ -12,4 +12,5 @@ export const LUX_CONFIG = {
   grainAmount: 0.04,  // сила зерна 0..1
   shadowStrength: 0.5,// дефолтная плотность контактной тени
   feather: [0.4, 0.8] as [number, number], // smoothstep краёв альфы: поджато, убирает «дымку» (A/B на S24)
+  colorMatch: { cast: 0.25, exposure: 0.15 }, // перенос цвета/экспозиции сцены на фигуру (мягко)
 }

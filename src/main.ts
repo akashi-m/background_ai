@@ -17,6 +17,8 @@ import { LuxCompositor, type HarmonizeToggles } from './lux/compositor'
 import { IdleSlides } from './lux/idle'
 import { loadLutTexture } from './lux/lut'
 import { shadowFromBbox, SmoothedShadow } from './lux/shadow'
+import { parseDevFlags } from './lux/devFlags'
+import { LuxUI, interiorLabels } from './lux/ui'
 
 async function fetchJson(url: string): Promise<unknown> {
   const res = await fetch(url)
@@ -25,10 +27,22 @@ async function fetchJson(url: string): Promise<unknown> {
 }
 
 async function start() {
-  const video = await openCamera() // HeadTracker-параллакс фона (v2) остаётся
+  const flags = parseDevFlags(location.search)
   const calibration = loadCalibration()
-  const tracker = new HeadTracker(video, calibration)
-  await tracker.init()
+  let tracker: HeadTracker | null = null
+  let videoLag: () => number = () => 0
+  if (!flags.noTracker) {
+    const video = await openCamera() // HeadTracker-параллакс фона (v2)
+    tracker = new HeadTracker(video, calibration)
+    await tracker.init()
+    let lastVideoFrameAt = performance.now()
+    const onVideoFrame = () => {
+      lastVideoFrameAt = performance.now()
+      ;(video as HTMLVideoElement & { requestVideoFrameCallback(cb: () => void): void }).requestVideoFrameCallback(onVideoFrame)
+    }
+    ;(video as HTMLVideoElement & { requestVideoFrameCallback(cb: () => void): void }).requestVideoFrameCallback(onVideoFrame)
+    videoLag = () => performance.now() - lastVideoFrameAt
+  }
 
   const renderer = new THREE.WebGLRenderer({ antialias: false })
   renderer.setSize(innerWidth, innerHeight)
@@ -41,7 +55,7 @@ async function start() {
     renderer,
     Math.floor(innerWidth * renderer.getPixelRatio()),
     Math.floor(innerHeight * renderer.getPixelRatio()),
-    { wrapStrength: LUX_CONFIG.wrapStrength, grainAmount: LUX_CONFIG.grainAmount, feather: LUX_CONFIG.feather },
+    { wrapStrength: LUX_CONFIG.wrapStrength, grainAmount: LUX_CONFIG.grainAmount, feather: LUX_CONFIG.feather, colorMatch: LUX_CONFIG.colorMatch },
   )
   addEventListener('resize', () => {
     renderer.setSize(innerWidth, innerHeight)
@@ -66,12 +80,19 @@ async function start() {
   const person = new PersonStream(LUX_CONFIG.captureUrl)
   person.start()
   const experience = new Experience(LUX_CONFIG)
+  if (flags.forcePhase) {
+    // форс через публичный механизм F5: крутим цикл до нужной фазы
+    while (experience.phase !== flags.forcePhase) experience.forceNext()
+  }
   const slides = new IdleSlides(LUX_CONFIG.slideSec)
   await slides.load(
     worlds.filter((w) => w.meta.format === 'photo25d').map((w) => `/assets/worlds/${w.name}/${w.meta.file}`),
   )
   const shadowSmooth = new SmoothedShadow()
-  const toggles: HarmonizeToggles = { lut: true, wrap: true, shadow: true, grain: true }
+  const toggles: HarmonizeToggles = { lut: true, wrap: true, shadow: true, grain: true, colorMatch: true }
+
+  const ui = new LuxUI((i) => switcher.switchTo(i))
+  ui.setWorlds(interiorLabels(worlds.map((w) => w.meta)))
 
   new AlignController(() => worlds[switcher.index], () => SCENE_CONFIG.worlds[switcher.index])
 
@@ -91,6 +112,7 @@ async function start() {
     if (e.code === 'F2') toggles.wrap = !toggles.wrap
     if (e.code === 'F3') toggles.shadow = !toggles.shadow
     if (e.code === 'F4') toggles.grain = !toggles.grain
+    if (e.code === 'F6') toggles.colorMatch = !toggles.colorMatch
     if (e.code === 'F5') experience.forceNext()
     if (e.code === 'Comma' || e.code === 'Period') {
       parallaxGain = Math.round(Math.min(2, Math.max(0.1, parallaxGain + (e.code === 'Period' ? 0.05 : -0.05))) * 100) / 100
@@ -108,13 +130,6 @@ async function start() {
   })
 
   const debug = new DebugPanel(calibration, () => { /* подхватится в следующем кадре */ })
-
-  let lastVideoFrameAt = performance.now()
-  const onVideoFrame = () => {
-    lastVideoFrameAt = performance.now()
-    ;(video as HTMLVideoElement & { requestVideoFrameCallback(cb: () => void): void }).requestVideoFrameCallback(onVideoFrame)
-  }
-  ;(video as HTMLVideoElement & { requestVideoFrameCallback(cb: () => void): void }).requestVideoFrameCallback(onVideoFrame)
 
   const camera = new THREE.PerspectiveCamera()
 
@@ -134,7 +149,7 @@ async function start() {
       healthy,
     })
 
-    const eye = tracker.update(now, dt)
+    const eye = tracker ? tracker.update(now, dt) : { x: 0, y: 0, z: 60 }
     const safeZ = Math.min(Math.max(eye.z, 20), 300)
     const safeEye = { x: eye.x * parallaxGain, y: eye.y * parallaxGain, z: safeZ }
     const cmPerPx = calibration.screenWcm / screen.width
@@ -165,7 +180,10 @@ async function start() {
       canvasAspect: innerWidth / innerHeight,
     })
 
-    debug.frame(safeEye, tracker.faceVisible, 0, performance.now() - lastVideoFrameAt,
+    ui.setActive(switcher.index)
+    ui.update(experience.mirrorOpacity)
+
+    debug.frame(safeEye, tracker?.faceVisible ?? false, 0, videoLag(),
       `lux: ${experience.phase} mirror=${experience.mirrorOpacity.toFixed(2)} поток=${person.status} битых=${person.badMessages}`)
   })
 }

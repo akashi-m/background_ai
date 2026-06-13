@@ -49,10 +49,21 @@ def test_parse_args_bad_model() -> None:
         parse_args(["--model", "transformer9000"])
 
 
-def test_bitrate_default_and_parse() -> None:
-    assert CaptureConfig().bitrate_mbps == 8.0
-    cfg = parse_args(["--bitrate", "20"])
-    assert cfg.bitrate_mbps == 20.0
+def test_bitrate_auto_by_resolution() -> None:
+    from capture.config import auto_bitrate_mbps
+
+    assert auto_bitrate_mbps(1920, 1080) == 25     # ~2*1920*1080*6/1e6 ≈ 24.9
+    assert auto_bitrate_mbps(1280, 720) >= 8       # минимум-пол
+    assert auto_bitrate_mbps(3840, 2160) >= 90     # 4K SBS — щедро, с запасом
+
+
+def test_bitrate_auto_when_flag_omitted() -> None:
+    # без --bitrate: авто по разрешению (1080p → 25)
+    assert parse_args(["--width", "1920", "--height", "1080"]).bitrate_mbps == 25.0
+
+
+def test_bitrate_flag_overrides_auto() -> None:
+    assert parse_args(["--bitrate", "50"]).bitrate_mbps == 50.0
 
 
 def test_parse_args_ratio_out_of_range() -> None:

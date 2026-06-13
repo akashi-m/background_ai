@@ -20,6 +20,16 @@ class CaptureConfig(BaseModel):
     bitrate_mbps: float = 8.0    # битрейт VP8 (loopback): резкость live-композита
 
 
+def auto_bitrate_mbps(width: int, height: int) -> float:
+    """Щедрый битрейт по разрешению SBS-кадра (2×width).
+
+    Loopback — полоса бесплатна, экономить нечего. ~6 «бит/пиксель»: визуально
+    прозрачно при наших fps, с запасом для 4K. Пол — 8 Мбит/с.
+    """
+    sbs_pixels = 2 * width * height
+    return max(8.0, float(round(sbs_pixels * 6 / 1_000_000)))
+
+
 def parse_args(argv: list[str] | None = None) -> CaptureConfig:
     p = argparse.ArgumentParser(description="Stellar Mirror Lux capture-сервис")
     p.add_argument("--source", default="webcam",
@@ -34,8 +44,8 @@ def parse_args(argv: list[str] | None = None) -> CaptureConfig:
     p.add_argument("--height", type=int, default=720)
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("--models-dir", default="models")
-    p.add_argument("--bitrate", type=float, default=8.0,
-                   help="битрейт VP8 в Мбит/с (loopback): выше = резче live-картинка")
+    p.add_argument("--bitrate", type=float, default=None,
+                   help="битрейт VP8 в Мбит/с (loopback); по умолчанию авто по разрешению")
     a = p.parse_args(argv)
 
     source, file_path = a.source, ""
@@ -48,9 +58,11 @@ def parse_args(argv: list[str] | None = None) -> CaptureConfig:
     if not 0.05 <= a.ratio <= 1.0:
         p.error(f"--ratio вне диапазона 0.05..1.0: {a.ratio}")
 
+    bitrate = a.bitrate if a.bitrate is not None else auto_bitrate_mbps(a.width, a.height)
+
     return CaptureConfig(
         source=source, file_path=file_path, camera_index=a.camera_index,
         engine=a.engine, model=a.model, ratio=a.ratio,
         width=a.width, height=a.height,
-        port=a.port, models_dir=a.models_dir, bitrate_mbps=a.bitrate,
+        port=a.port, models_dir=a.models_dir, bitrate_mbps=bitrate,
     )

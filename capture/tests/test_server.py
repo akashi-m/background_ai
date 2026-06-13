@@ -70,6 +70,14 @@ async def test_frame_png(client) -> None:
     assert body[:8] == b"\x89PNG\r\n\x1a\n"  # сигнатура PNG
 
 
+async def test_frame_png_feather_param(client) -> None:
+    """?feather=lo,hi → валидный PNG; битый параметр → как без него (не 400)."""
+    tight = await (await client.get("/frame.png?feather=0.35,0.80")).read()
+    assert tight[:8] == b"\x89PNG\r\n\x1a\n"
+    bad = await client.get("/frame.png?feather=мусор")
+    assert bad.status == 200  # дев-инструмент: битый параметр игнорим, не 400
+
+
 async def test_frame_png_no_frame_yet() -> None:
     class EmptyPipeline(FakePipeline):
         def latest_sbs(self) -> np.ndarray | None:

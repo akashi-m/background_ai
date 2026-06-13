@@ -73,14 +73,40 @@ async def _viewer(request: web.Request) -> web.Response:
     return web.Response(text=VIEWER_HTML.read_text(), content_type="text/html")
 
 
+def _parse_feather(raw: str | None) -> tuple[float, float] | None:
+    """'lo,hi' → (lo, hi); мусор → None (дев-параметр, не валидируем строго)."""
+    if not raw:
+        return None
+    try:
+        lo, hi = (float(x) for x in raw.split(","))
+        return lo, hi
+    except (ValueError, TypeError):
+        return None
+
+
 async def _frame_png(request: web.Request) -> web.Response:
-    """Lossless-снимок последнего SBS-кадра — оценка матта мимо WebRTC-кодека."""
+    """Lossless-снимок последнего SBS-кадра — оценка матта мимо WebRTC-кодека.
+
+    ?feather=lo,hi — превью поджатия края (та же smoothstep, что в рендерере);
+    хранимая альфа не меняется.
+    """
     import cv2
+
+    from capture.compose import shape_alpha
 
     pipeline: PipelineLike = request.app["pipeline"]
     sbs = pipeline.latest_sbs()
     if sbs is None:
         return web.Response(status=503, text="кадра ещё нет")
+
+    window = _parse_feather(request.query.get("feather"))
+    if window is not None:
+        w = sbs.shape[1] // 2
+        a = sbs[:, w:, 0].astype(np.float32) / 255.0
+        a8 = (shape_alpha(a, *window) * 255.0 + 0.5).clip(0, 255).astype(np.uint8)
+        sbs = sbs.copy()
+        sbs[:, w:, 0] = sbs[:, w:, 1] = sbs[:, w:, 2] = a8
+
     ok, png = cv2.imencode(".png", cv2.cvtColor(sbs, cv2.COLOR_RGB2BGR))
     if not ok:
         return web.Response(status=500, text="PNG не закодировался")

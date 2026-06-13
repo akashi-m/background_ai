@@ -3,6 +3,18 @@
 import numpy as np
 
 
+def shape_alpha(alpha: np.ndarray, lo: float, hi: float) -> np.ndarray:
+    """smoothstep(lo, hi, alpha) — поджатие полупрозрачной полосы края.
+
+    Та же формула, что в шейдере фигуры рендерера (uFeather). Невалидное окно
+    (lo >= hi) → сырая альфа без изменений (дев-параметр /frame.png).
+    """
+    if not lo < hi:
+        return alpha
+    t = np.clip((alpha - lo) / (hi - lo), 0.0, 1.0)
+    return (t * t * (3.0 - 2.0 * t)).astype(np.float32)
+
+
 def pack_sbs(rgb: np.ndarray, alpha: np.ndarray) -> np.ndarray:
     """[H,W,3] uint8 + [H,W] float32 0..1 → [H,2W,3] uint8: слева RGB, справа альфа."""
     if rgb.ndim != 3 or rgb.shape[2] != 3 or alpha.shape != rgb.shape[:2]:

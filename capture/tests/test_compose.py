@@ -1,6 +1,30 @@
 import numpy as np
 
-from capture.compose import pack_sbs, unpack_sbs
+from capture.compose import pack_sbs, shape_alpha, unpack_sbs
+
+
+def test_shape_alpha_endpoints_and_monotonic() -> None:
+    a = np.linspace(0, 1, 11, dtype=np.float32)
+    out = shape_alpha(a, 0.35, 0.80)
+    assert out.dtype == np.float32
+    assert out[0] == 0.0 and out[-1] == 1.0          # ниже lo → 0, выше hi → 1
+    assert np.all(np.diff(out) >= 0)                  # монотонно не убывает
+    assert (a[1:-1] < 0.35).sum() and out[a < 0.35].max() == 0.0  # хвост обнулён
+
+
+def test_shape_alpha_tightens_band() -> None:
+    """Поджатие сужает полупрозрачную полосу относительно сырой альфы."""
+    a = np.linspace(0, 1, 1000, dtype=np.float32)
+    raw_band = ((a > 0.1) & (a < 0.9)).mean()
+    tight = shape_alpha(a, 0.35, 0.80)
+    tight_band = ((tight > 0.1) & (tight < 0.9)).mean()
+    assert tight_band < raw_band
+
+
+def test_shape_alpha_invalid_window_returns_raw() -> None:
+    a = np.linspace(0, 1, 5, dtype=np.float32)
+    assert np.array_equal(shape_alpha(a, 0.8, 0.3), a)   # lo>=hi → сырая
+    assert np.array_equal(shape_alpha(a, 0.5, 0.5), a)
 
 
 def test_pack_shape_and_layout() -> None:

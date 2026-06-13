@@ -24,6 +24,8 @@ export interface BuiltWorld {
     camera: import('../lux/shadowGeom').ShadowCamera
     floorZ: number
     worldPos: THREE.Texture
+    // те же мировые XYZ на CPU (Float32) — для сэмпла точки пола под ступнями (якорь тени)
+    worldPosData: { data: Float32Array; width: number; height: number }
   }
 }
 
@@ -115,14 +117,16 @@ export async function buildWorld(
         const lamps = lights.lamps as { pos: [number, number, number]; weight: number }[]
         const wsum = lamps.reduce((s, l) => s + l.weight, 0) || 1
         lamps.forEach((l) => { l.weight = l.weight / wsum })
-        const worldPos = await new EXRLoader().loadAsync(baseUrl + meta.shadow.worldPosFile)
+        const worldPos = await new EXRLoader().setDataType(THREE.FloatType).loadAsync(baseUrl + meta.shadow.worldPosFile)
         worldPos.minFilter = THREE.NearestFilter
         worldPos.magFilter = THREE.NearestFilter
+        const img = worldPos.image as { data: Float32Array; width: number; height: number }
         built.shadowData = {
           lamps,
           camera: lights.camera,
           floorZ: lights.floorZ,
           worldPos,
+          worldPosData: { data: img.data, width: img.width, height: img.height },
         }
       } catch (e) {
         console.warn(`мир «${name}»: shadowData не загружена (${e instanceof Error ? e.message : e}); тень-фолбэк`)

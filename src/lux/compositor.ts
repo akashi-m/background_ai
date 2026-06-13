@@ -59,6 +59,7 @@ export class LuxCompositor {
   private personMat: THREE.ShaderMaterial
   private groundShadowMat: THREE.ShaderMaterial // силуэтная контактная тень у ног
   private roomShadowMat: THREE.ShaderMaterial // физическая тень по мировым координатам комнаты
+  private blobMat: THREE.ShaderMaterial // контактная «тень-капля», приклеена к ступням
   private fadeMat: THREE.MeshBasicMaterial
 
   constructor(
@@ -330,7 +331,7 @@ export class LuxCompositor {
         uCamPos: { value: new THREE.Vector3() },
         uLamp0: { value: new THREE.Vector3() }, uLamp1: { value: new THREE.Vector3() }, uLamp2: { value: new THREE.Vector3() },
         uW: { value: new THREE.Vector3(1, 0, 0) },
-        uStrength: { value: 0.55 }, uBias: { value: 0.03 },
+        uStrength: { value: 0.4 }, uBias: { value: 0.005 }, uSoft: { value: 1.0 },
         uOpacity: { value: 0 }, uNLamps: { value: 0 },
       },
       vertexShader: VERT3,
@@ -340,18 +341,28 @@ export class LuxCompositor {
         uniform sampler2D tBg, tWorld, tVideo;
         uniform vec2 uUvScale;
         uniform vec3 uF, uCamPos, uLamp0, uLamp1, uLamp2, uW;
-        uniform float uH, uStrength, uBias, uOpacity, uNLamps, uVideoAspect;
+        uniform float uH, uStrength, uBias, uOpacity, uNLamps, uVideoAspect, uSoft;
 
-        float silAlpha(vec3 P) {
+        // pen — масштаб полутени (PCSS: растёт с расстоянием окклюдер→приёмник)
+        float silAlpha(vec3 P, float pen) {
           vec3 n = normalize(vec3(uCamPos.xy - uF.xy, 0.0));   // нормаль билборда (к камере, горизонт.)
           vec3 tang = normalize(cross(vec3(0.0, 0.0, 1.0), n)); // касательная (вбок)
           float u = dot(P - uF, tang);
           float v = (P.z - uF.z) / max(uH, 0.01);              // 0 ступни .. 1 макушка
           if (v < 0.0 || v > 1.0) return 0.0;
           float halfW = uH * uVideoAspect * 0.5;               // ширина билборда = рост × аспект
-          float su = clamp(0.5 + u / max(2.0 * halfW, 0.01), 0.0, 1.0);
-          vec2 m = vec2(1.0 - su, v);                          // зеркальный флип как у фигуры
-          return texture(tVideo, vec2(0.5 + m.x * 0.5, m.y)).r; // правая половина SBS = альфа
+          float su = 0.5 + u / max(2.0 * halfW, 0.01);
+          // PCF-ядро шириной e: penumbra = база × uSoft × pen(расстояние)
+          float e = 0.012 * uSoft * pen;
+          float a = 0.0;
+          for (int i = -2; i <= 2; i++) {
+            for (int j = -2; j <= 2; j++) {
+              float sj = clamp(su + float(i) * e, 0.0, 1.0);
+              float vj = clamp(v + float(j) * e, 0.0, 1.0);
+              a += texture(tVideo, vec2(0.5 + (1.0 - sj) * 0.5, vj)).r; // флип + правая половина SBS
+            }
+          }
+          return a / 25.0;
         }
 
         float shadowFromLamp(vec3 Pw, vec3 L) {
@@ -362,7 +373,8 @@ export class LuxCompositor {
           float tHit = dot(uF - Pw, n) / denom;
           if (tHit <= uBias || tHit >= 1.0) return 0.0;
           vec3 hit = Pw + dir * tHit;
-          return silAlpha(hit);
+          // PCSS: чем дальше тело от пола по лучу (больше tHit), тем шире полутень
+          return silAlpha(hit, 1.0 + tHit * 6.0);
         }
 
         void main() {
@@ -378,6 +390,27 @@ export class LuxCompositor {
           fragColor = vec4(bg, 1.0);
         }
       `,
+    })
+
+    // контактная «тень-капля»: мягкий радиальный эллипс, намертво в экранной
+    // точке ступней — «приклеивает» ноги к полу (убийца Peter-Pan). Затемняет фон.
+    this.blobMat = new THREE.ShaderMaterial({
+      uniforms: {
+        tBg: { value: null }, uCenter: { value: new THREE.Vector2(0.5, 0.1) },
+        uRadius: { value: new THREE.Vector2(0.1, 0.04) }, uOpacity: { value: 0 },
+      },
+      vertexShader: VERT,
+      fragmentShader: /* glsl */ `
+        varying vec2 vUv; uniform sampler2D tBg; uniform vec2 uCenter, uRadius; uniform float uOpacity;
+        void main() {
+          vec3 bg = texture2D(tBg, vUv).rgb;
+          vec2 d = (vUv - uCenter) / uRadius;
+          float r = length(d);
+          float a = (1.0 - smoothstep(0.35, 1.0, r)) * uOpacity; // плотнее в центре, мягкий край
+          gl_FragColor = vec4(bg * (1.0 - a), 1.0);
+        }
+      `,
+      depthTest: false,
     })
 
     this.fadeMat = new THREE.MeshBasicMaterial({
@@ -422,6 +455,7 @@ export class LuxCompositor {
     shadowStrength: number
     shadowData: { lamps: { pos: [number, number, number]; weight: number }[]; worldPos: THREE.Texture; floorZ: number; cameraPos: [number, number, number] } | null
     personFloor: { F: [number, number, number]; H: number } | null
+    feetUV: { u: number; v: number; halfW: number } | null
     shadowCfg: { strength: number; softness: number; bias: number }
     lut: THREE.Data3DTexture
     lutSize: number
@@ -520,6 +554,7 @@ export class LuxCompositor {
         u.uW.value.set(lamps[0]?.weight ?? 0, lamps[1]?.weight ?? 0, lamps[2]?.weight ?? 0)
         u.uStrength.value = opts.shadowCfg.strength
         u.uBias.value = opts.shadowCfg.bias
+        u.uSoft.value = opts.shadowCfg.softness
         u.uOpacity.value = opts.mirrorOpacity
         this.pass(this.roomShadowMat, this.shadowRT)
         this.blitMat.uniforms.tSrc.value = this.shadowRT.texture
@@ -531,6 +566,18 @@ export class LuxCompositor {
         g.uOpacity.value = opts.shadowStrength * opts.mirrorOpacity
         g.uLightX.value = opts.lightDirX * 0.015 // лёгкий снос по ключу (реальная почти вертикальна)
         this.pass(this.groundShadowMat, this.compositeRT)
+      }
+      // 4б. контактная «тень-капля» — ВСЕГДА, приклеена к экранным ступням
+      if (opts.feetUV) {
+        const b = this.blobMat.uniforms
+        b.tBg.value = this.compositeRT.texture
+        b.uCenter.value.set((opts.feetUV.u - 0.5) / sx + 0.5, (opts.feetUV.v - 0.5) / sy + 0.5)
+        const rx = (opts.feetUV.halfW / sx) * 1.5
+        b.uRadius.value.set(rx, rx * 0.4)
+        b.uOpacity.value = 0.5 * opts.mirrorOpacity
+        this.pass(this.blobMat, this.shadowRT)
+        this.blitMat.uniforms.tSrc.value = this.shadowRT.texture
+        this.pass(this.blitMat, this.compositeRT)
       }
     }
 

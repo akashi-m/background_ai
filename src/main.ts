@@ -27,6 +27,17 @@ async function fetchJson(url: string): Promise<unknown> {
   return res.json()
 }
 
+// Мировая XYZ-точка пикселя плейта (u,v в [0..1], v вверх). Данные EXR row0=верх.
+function sampleWorldXYZ(
+  wp: { data: Float32Array; width: number; height: number }, u: number, v: number,
+): [number, number, number] {
+  // как шейдер: texture(tWorld, (u,v)) с flipY=false → data row = v*(h-1)
+  const px = Math.min(wp.width - 1, Math.max(0, Math.round(u * (wp.width - 1))))
+  const py = Math.min(wp.height - 1, Math.max(0, Math.round(v * (wp.height - 1))))
+  const i = (py * wp.width + px) * 4
+  return [wp.data[i], wp.data[i + 1], wp.data[i + 2]]
+}
+
 async function start() {
   const flags = parseDevFlags(location.search)
   const calibration = loadCalibration()
@@ -172,17 +183,28 @@ async function start() {
     // mirror-X центра bbox, как делает существующая силуэтная тень
     const sd = active.shadowData
     let personFloor: { F: [number, number, number]; H: number } | null = null
+    let feetUV: { u: number; v: number; halfW: number } | null = null
+    // экранная точка ступней (плейт-uv) для контактной blob-тени — нужна всегда,
+    // когда есть фигура в кадре (даже без мир-данных)
+    if (healthy && t?.bbox) {
+      const [bx0, , bx1, by1] = t.bbox
+      feetUV = { u: 1 - (bx0 + bx1) / 2, v: 1 - by1, halfW: (bx1 - bx0) / 2 }
+    }
     if (sd && healthy && t?.bbox && t.distanceCm != null) {
       const [x0, y0, x1, y1] = t.bbox
-      const cur = personFloorWorld(
+      // рост — из телеметрии (bbox+дистанция); F — якорь к экранным ступням:
+      // worldPos-EXR = обратная проекция камеры-плейта, сэмплим точку пола под
+      // ступнями (X зеркалится как у фигуры, низ bbox = y1 → texture v = 1-y1).
+      const H = personFloorWorld(
         { distanceCm: t.distanceCm, bboxCx: 1 - (x0 + x1) / 2, bboxH: y1 - y0 },
         sd.camera, sd.floorZ,
-      )
+      ).H
+      const F = sampleWorldXYZ(sd.worldPosData, 1 - (x0 + x1) / 2, 1 - y1)
       const k = 1 - Math.exp(-dt * 8)
       smoothF = smoothF
-        ? [smoothF[0] + (cur.F[0] - smoothF[0]) * k, smoothF[1] + (cur.F[1] - smoothF[1]) * k, cur.F[2]]
-        : cur.F
-      smoothH = smoothH + (cur.H - smoothH) * k
+        ? [smoothF[0] + (F[0] - smoothF[0]) * k, smoothF[1] + (F[1] - smoothF[1]) * k, smoothF[2] + (F[2] - smoothF[2]) * k]
+        : F
+      smoothH = smoothH + (H - smoothH) * k
       personFloor = { F: smoothF, H: smoothH }
     } else {
       smoothF = null
@@ -206,6 +228,7 @@ async function start() {
         cameraPos: active.shadowData.camera.pos,
       } : null,
       personFloor,
+      feetUV,
       shadowCfg: LUX_CONFIG.shadow,
       lut: luts[switcher.index],
       lutSize: luts[switcher.index].image.width,

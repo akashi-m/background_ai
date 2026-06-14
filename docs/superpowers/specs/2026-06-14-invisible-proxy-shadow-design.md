@@ -186,7 +186,7 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap
 - **B2 (follow-up, только если box-receiver визуально не дотягивает): EXR-mesh.** Сабсэмпл-сетка ~**128×228** (портрет 9:16) из worldPos-EXR (`shadowData.worldPosData`). Вершина `(gx,gy)` = `sampleWorldXYZ(worldPosData, u, v)`. `BufferGeometry`: `position` (Float32×3), индексы **Uint32**, 2 треугольника/квад. **Tear на разрывах глубины:** для квада — `max|Δ|` мировой позиции по рёбрам; при `|Δ| > k·dist` — треугольник не индексируется (убирает rubber-sheeting между передней мебелью и фоном). `computeVertexNormals()` после сборки.
   - **Известный артефакт tear↔receive (исправление, major):** `ShadowMaterial` затемняет только там, где есть геометрия приёмника. В **разорванных** регионах (tear) геометрии нет → дыра → белый clear → **тень не может лечь поперёк шва**. Тень, «взбирающаяся» с пола на ближнюю кромку мебели, выпадет ровно на стыке двух глубинных слоёв. Решение в B2: **сохранять «мостовые» треугольники в контактных зонах** (пол↔основание мебели) — рвать только дальние фон-разрывы; либо расширить порог `k` так, чтобы контактные зоны оставались связными. Минимум — задокументировать как известный артефакт, не как невидимое допущение. Именно из-за этого взаимодействия B2 — отдельная фаза, а не под-пункт.
 
-**Материал приёмника — `THREE.ShadowMaterial`** (r180): `transparent=true`, `color=black`, принимает тень, всюду прозрачен; `opacity` ≈ 0.3–0.5 (выводим из `shadowCfg.strength`). **Отклонение (см. §9.3):** `ShadowMaterial` рисует тень-терм нативно, но **не связан физически с яркостью фона**. Затемнение — alpha-blend `mix(white, black, α)`, а не `multiply` по реальной картинке плейта. Компенсируем композитингом (§4.4): рендерим в shadowRT с **белым** clear и **мультипликативно** блитим на `compositeRT`. На белом таргете тень-пиксель даёт `(1-α)`-серый, освещённый — белый (1.0) → multiply нейтрален вне тени. Корректно.
+**Материал приёмника — `THREE.ShadowMaterial`** (r180): `transparent=true`, `color=black`, принимает тень, всюду прозрачен; `opacity = shadowStrength` — **per-room мастер-ручка** `meta.shadowStrength` (§4.5), а **не** глобальный `shadowCfg.strength`. **Отклонение (см. §9.3):** `ShadowMaterial` рисует тень-терм нативно, но **не связан физически с яркостью фона**. Затемнение — alpha-blend `mix(white, black, α)`, а не `multiply` по реальной картинке плейта. Компенсируем композитингом (§4.4): рендерим в shadowRT с **белым** clear и **мультипликативно** блитим на `compositeRT`. На белом таргете тень-пиксель даёт `(1-α)`-серый, освещённый — белый (1.0) → multiply нейтрален вне тени. Корректно.
 
 ### 4.2 ProxyRig — невидимый кастер (rebuild каждый кадр)
 - Капсулы (`CapsuleGeometry`) между суставами из `pose.world` (метры, hip-origin): торс (плечи↔бёдра), руки 11→13→15 и 12→14→16, ноги 23→25→27 и 24→26→28, голова — сфера у nose/ear. Радиусы — эвристики (рука ~0.05 м, торс ~0.12 м).
@@ -251,11 +251,28 @@ if (opts.pose && opts.pose.healthy >= POSE_ENTER && opts.shadowData && opts.pers
 }
 // 4б. blob-контактная тень — ВСЕГДА (перетюнена, §6), compositor.ts:571-581
 ```
-- `multiplyBlitMat` читает `tBg`, `tShadow`, `uUvScale`; делает `gl_FragColor = vec4(tBg.rgb * sampleShadow.rgb, 1.0)` (умножение цвета на тень-фактор; clear shadowRT в белый → вне тени множитель 1.0, кадр не темнеет). **Вместо** CustomBlending пишем результат в **`shadowRT2`** (temp), затем блит обратно в `compositeRT` — точно как round-trip v1 через `shadowRT`. Никакого `compositeRT2`, никакого «swap/blit обратно»-комментария: два именованных пасса.
+- `multiplyBlitMat` читает `tBg`, `tShadow`, `uUvScale`, `uShadowFloorK`, `uShadowStrength`; вычисляет `shadowTerm = 1.0 - sampleShadow.r` (на белом clear: вне тени `term=0`), затем множитель `m = mix(1.0, 1.0 - uShadowStrength·uShadowFloorK, shadowTerm)` и `gl_FragColor = vec4(tBg.rgb · m, 1.0)` — вне тени `m=1.0` (кадр не темнеет), в самой плотной точке `m` упирается в потолок черноты (§4.5, не уходит в 0). **Вместо** CustomBlending пишем результат в **`shadowRT2`** (temp), затем блит обратно в `compositeRT` — точно как round-trip v1 через `shadowRT`. Никакого `compositeRT2`, никакого «swap/blit обратно»-комментария: два именованных пасса.
 - **Resize:** `shadowRT` уже ресайзится (`compositor.ts:421-427`, диапазон `:421-427`). Новый **`shadowRT2`** добавить туда же, иначе stale-размер.
 - **GLSL-версия:** `roomShadowMat`/`personMat` — GLSL3; blob/blit — GLSL1. `multiplyBlitMat` объявить с явной `glslVersion` (GLSL1 достаточно — простой multiply).
 - **Тон-маппинг/output-colorspace** — только на финальном composite (`grainMat`, `:603`), не на промежуточном линейном shadowRT.
 - В proxy-режиме `roomShadowMat` **не вызывается**, но остаётся в коде как fallback-ветка.
+- **Потолок черноты в шейдере (§4.5):** `multiplyBlitMat` не множит на «голый» тень-терм, а на `mix(1.0, 1.0 - shadowStrength·SHADOW_FLOOR_K, shadowTerm)` — даже в самой плотной точке кадр не уходит в чёрный (прошлая претензия «тени слишком чёрные»).
+
+### 4.5 Единое сглаживание + per-room сила тени («тень — не отдельная наклейка»)
+
+**Главное требование заказчика:** тень НЕ должна читаться как отдельный слой поверх «фон-текстуры». Фон, фигура и тень — **одинаково сглажены** и живут под единым зерном/мягкостью. Средства (большинство уже в архитектуре — фиксируем как инварианты, остальное — knob'и на live-тюнинг):
+
+1. **Единое зерно поверх всего.** `grainMat` — финальный пасс на весь `compositeRT` (`compositor.ts:603-606`), кладётся ПОСЛЕ слота тени → одно плёночное зерно покрывает фон+тень+фигуру. **Инвариант:** слот proxy-тени всегда ДО `personMat`/`grainMat`; зерно/тон-маппинг на промежуточный `shadowRT` НЕ добавлять.
+2. **Per-room сила тени = `meta.shadowStrength`** (уже есть: `worldMeta.ts:19,74-80`; 0..1; гостиная=0.6; дефолт 0.5) — **мастер-ручка яркости тени на локацию** (где светлее — ставим меньше). v2 подключает её ко ВСЕМ компонентам:
+   - тело-прокси `ShadowMaterial.opacity = shadowStrength` (§4.1) — заменяет глобальный `shadowCfg.strength`, который v1 `roomShadowMat` берёт ошибочно (`:555`);
+   - blob `uOpacity = shadowStrength · blobRatio · mirrorOpacity` (§6) — blob светлее тела через относительный `blobRatio≈0.5`, но всё равно масштабируется per-room;
+   - fallback `groundShadowMat` уже берёт `shadowStrength` (`:566`) — оставить.
+   Итог: **одна цифра в `meta.json` на комнату** двигает все тени согласованно.
+3. **Потолок черноты (не переборщить).** Множитель в `multiplyBlitMat` ограничен снизу `SHADOW_FLOOR_K` (§4.4): тень не чернее объектов сцены. При `shadowStrength=0.6`, `SHADOW_FLOOR_K≈0.7` самый тёмный множитель ≈ 0.58, а не 0.
+4. **Мягкость — под сцену, не острее.** Кромку тени сглаживаем под общую мягкость плейта: `PCFSoftShadowMap` + `key.shadow.radius` подбираем так, чтобы край был мягким (не «вырезанным»); при необходимости — лёгкий 1-проходный блюр `shadowRT` перед multiply. Критерий приёмки: переход свет→тень читается так же мягко, как мягкие тени самого Cycles-плейта.
+5. **Линейность.** Множим в линейном `compositeRT` (тон-маппинг/sRGB — только в `grainMat`), чтобы затемнение было физичным, а не «грязным» в гамме.
+
+Live-knob'и: `meta.shadowStrength` (per-room), `LUX_CONFIG.shadow.softness`/`key.shadow.radius` (мягкость), `LUX_CONFIG.shadow.blobRatio` (легкость blob), `LUX_CONFIG.shadow.shadowFloorK` (потолок черноты).
 
 ---
 
@@ -285,11 +302,11 @@ if (opts.pose && opts.pose.healthy >= POSE_ENTER && opts.shadowData && opts.pers
 
 **Гистерезис (исправление — обязателен, иначе chatter на границе):** два порога. Входим в proxy при `healthy ≥ POSE_ENTER` (напр. 0.7), сваливаемся в room при `healthy < POSE_DROP` (напр. 0.5) — числа иллюстративные, тюнятся на live. Между порогами держим текущее состояние (+crossfade-вес выше).
 
-**Blob перетюнить мягче/меньше** (значения из `compositor.ts:572-577`, дефолты `:399-400`, шейдер `:409`). **Источник `0.28` (исправление — связываем с config):** добавить в `LUX_CONFIG.shadow` поле `blobStrength` ИЛИ выразить как фактор `strength`. Поскольку текущий `LUX_CONFIG.shadow.strength = 0.5` (`config.ts:17`), `0.28 ≈ strength · 0.56`. Решение: **новое поле `LUX_CONFIG.shadow.blobStrength = 0.28`**, и `uOpacity = blobStrength · mirrorOpacity` — так live-тюнинг честный, без второго хардкода.
+**Blob перетюнить мягче/меньше + привязать к per-room силе (§4.5)** (значения из `compositor.ts:572-577`, дефолты `:399-400`, шейдер `:409`). Заказчик хочет ОДНУ per-room ручку (`meta.shadowStrength`), масштабирующую всю тень, и blob СВЕТЛЕЕ тела. Поэтому blob не получает абсолютный `0.28`, а выражается как доля per-room силы: `uOpacity = shadowStrength · blobRatio · mirrorOpacity`, где **`LUX_CONFIG.shadow.blobRatio ≈ 0.5`** (для гостиной `0.6·0.5 = 0.30` — то самое «светлее/меньше»). Тело-прокси берёт полную `shadowStrength`, blob — половину. Один master-knob per-room, blob всегда легче.
 
 | Параметр | v1 (сейчас) | v2 (цель) | Где |
 |---|---|---|---|
-| `uOpacity` множитель | `0.5 * mirrorOpacity` (хардкод) | `shadow.blobStrength(=0.28) * mirrorOpacity` | `:577` + `config.ts` |
+| `uOpacity` множитель | `0.5 * mirrorOpacity` (хардкод) | `shadowStrength · blobRatio(≈0.5) · mirrorOpacity` (per-room) | `:577` + `config.ts` |
 | `rx` (радиус X) | `(halfW/sx) * 1.5` | `(halfW/sx) * 1.05` | `:575` |
 | `uRadius.y` | `rx * 0.4` | `rx * 0.25` | `:576` |
 | smoothstep края | `smoothstep(0.35, 1.0, r)` | `smoothstep(0.6, 1.0, r)` | шейдер `:409` |
@@ -354,7 +371,8 @@ Blob остаётся **всегда** (proxy- и fallback-режим) как к
 14. **Crossfade+гистерезис деградации — обязательны** (§6), не optional.
 15. **F sanity-gate** — обязателен (§5).
 16. **Контеншн RVM+Pose — CPU+CPU серийный**, не GPU (исправление рационала, §3.2/§3.5).
-17. **`blobStrength` — поле config**, не второй хардкод `0.28` (§6).
+17. **`blobRatio` — поле config** (не абсолютный хардкод `0.28`): blob = доля per-room силы, чтобы один master-knob двигал всю тень (§6, §4.5).
+18. **Per-room сила тени = `meta.shadowStrength` как мастер-ручка** (§4.5, требование заказчика «var силы тени на локацию»): подключена ко ВСЕМ компонентам (тело-прокси `ShadowMaterial.opacity`, blob через `blobRatio`, fallback `groundShadowMat`). v1 `roomShadowMat` ошибочно берёт глобальный `shadowCfg.strength` — в v2 фиксим на per-room. + потолок черноты `shadowFloorK` (тень не чернее объектов) + единое зерно/мягкость на фон+тень+фигуру (тень не читается отдельным слоем).
 
 ---
 
@@ -378,6 +396,7 @@ Blob остаётся **всегда** (proxy- и fallback-режим) как к
 - Шаг к мебели → тень **взбирается** на мебель/стену. **Оговорка:** «взбирание» — заслуга **геометрии приёмника**, не глубины тела; наклон **к/от камеры** меняет тень **слабо** (монокулярный z, §5/§8) — это сознательное ограничение, проговаривается заказчику.
 - Потеря позы / спина к камере / F вне пола → **плавный** откат на v1 (crossfade+гистерезис, §6) без морганий.
 - Тень садится точно под ступнями на плоском плейте (бейк камеры + cover-fit).
+- **Тень — не отдельная наклейка (главный критерий §4.5):** тень живёт под тем же зерном и той же мягкостью, что фон и фигура; не чернее объектов сцены; `meta.shadowStrength` подобран под яркость локации (где светлее — меньше). Проверка: глазами по краю силуэта и по плотности — нет ощущения «фон-текстура + наклеенная тень».
 
 ### Фазы (каждая — отдельный проверяемый exit)
 - **A — Capture (независима):** `PoseEngine` (VIDEO/CPU/full, RGB-as-is, int-ts-guard), проводка `pose` в `Pipeline.__init__`, `PosePacket`, расширение `PipelineStats`+`_telemetry_json`, фабрика `make_pose_engine`, скачать `.task` в `models_dir`, бенч **серийной суммы** RVM+Pose против тика 15 Гц, unit-тесты. *Exit:* в `/ws` приходит валидный `pose`; `pose_enabled=False` его не шлёт; fps не просел ниже порога.
@@ -385,7 +404,7 @@ Blob остаётся **всегда** (proxy- и fallback-режим) как к
 - **B2 — EXR-receiver (follow-up, опционально):** `roomMeshFromEXR` (invisible ShadowMaterial, Uint32, tear-culling + bridge-треугольники в контактных зонах). *Exit:* тень корректно взбирается на реальную мебель/стены без rubber-sheet и без seam-dropout в контактной зоне. **Делается только если box-receiver визуально не дотягивает.**
 - **C — Drive proxy (зависит от B1-alignment):** `buildProxyRig` от телеметрии (landmark-ориентация), якорь F + F sanity-gate, масштаб H, смузинг + демпф z. *Exit:* тень повторяет позу вживую на box-receiver’е.
 - **D1 — Compositor integration:** слот в `compositor.render()` — интерфейс `shadowData.camera`, multiply-blit через `shadowRT2`, resize-hook, proxy always-on (без лестницы). *Exit:* proxy-тень стабильно композитится, `compositeRT` остаётся каноном перед `personMat`/зерном; зелёные тесты.
-- **D2 — Degradation + sign-off:** лестница деградации, **crossfade+гистерезис**, перетюн blob (`blobStrength` в config), отключение `roomShadowMat` в proxy-режиме, live-приёмка. *Exit:* плавный откат без морганий + подпись заказчика.
+- **D2 — Degradation + sign-off + единое сглаживание (§4.5):** лестница деградации, **crossfade+гистерезис**, перетюн blob (`blobRatio` в config), per-room `meta.shadowStrength` подключён ко всем компонентам, потолок черноты `shadowFloorK`, мягкость кромки под сцену, отключение `roomShadowMat` в proxy-режиме, live-приёмка. *Exit:* плавный откат без морганий + тень не читается отдельным слоем + подпись заказчика.
 
 ---
 
@@ -402,7 +421,9 @@ Blob остаётся **всегда** (proxy- и fallback-режим) как к
 - `/Users/iman/Projects/background_ar/capture/pyproject.toml` — `mediapipe>=0.10.14` уже есть.
 - `/Users/iman/Projects/background_ar/src/main.ts` — `sampleWorldXYZ` (`:31-39`, ВЫНЕСТИ), `personFloor`/`feetUV`/F/H/смузинг (`:184-211`), `shadowData`-форвард (`:224-229`, +`camera`), инициализация рендерера (`:59-64`, +`shadowMap.enabled`).
 - `/Users/iman/Projects/background_ar/src/lux/compositor.ts` — слот тени (`:538-582`), v1 round-trip (`:559-561`), `opts.shadowData`-тип (`:456`), `roomShadowMat` cameraPos (`:548`), blob (`:572-577`, `:399-400`, шейдер `:409`), `setSize` (`:421-427`), `pass()` (`:429-443`).
-- `/Users/iman/Projects/background_ar/src/lux/config.ts` — `LUX_CONFIG.shadow` (`:17`); +`blobStrength`.
+- `/Users/iman/Projects/background_ar/src/lux/config.ts` — `LUX_CONFIG.shadow` (`:17`); +`blobRatio` (≈0.5), +`shadowFloorK` (≈0.7, потолок черноты §4.5).
+- `/Users/iman/Projects/background_ar/src/app/worldMeta.ts` — `shadowStrength` per-room (`:19,74-80`, мастер-ручка §4.5); `shadow` блок (`:22,83-87`).
+- `/Users/iman/Projects/background_ar/public/assets/worlds/living/meta.json` — `shadowStrength: 0.6` (пример per-room значения).
 - `/Users/iman/Projects/background_ar/src/scenes/worldScene.ts` — загрузка `shadowData` из lights.json+EXR (`:112-134`), полный `camera` (`:126`).
 - `/Users/iman/Projects/background_ar/src/lux/shadowGeom.ts` — `personFloorWorld` (`:28-43`), `ShadowCamera` (`:7-12`), `sampleWorldXYZ` (ПЕРЕНОС сюда).
 - `/Users/iman/Projects/background_ar/src/lux/telemetry.ts` — `Telemetry`+`parseTelemetry` (`:4-38`), расширить полем `pose` (независимый парсинг).

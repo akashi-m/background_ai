@@ -195,6 +195,9 @@ export class ShadowScene3D {
   scene: THREE.Scene
   camera: THREE.PerspectiveCamera
   caster!: THREE.Object3D
+  // C: pose-driven прокси (строится в ctor, в сцену НЕ добавляется здесь — становится
+  // кастером, когда compositor зовёт setCaster(proxyRig.object) при наличии позы).
+  proxyRig = new ProxyRig()
   private receiverGroup = new THREE.Group()
   private casterGroup = new THREE.Group()
 

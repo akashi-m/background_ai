@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { passesFloorGate, personFloorWorld, sampleWorldXYZ, Z_THR, PoseSmoother, proxyCapsuleTransforms, POSE_IDX, type ShadowCamera, type CapsuleXf } from './shadowGeom'
+import { passesFloorGate, personFloorWorld, sampleWorldXYZ, selectShadowMode, Z_THR, PoseSmoother, proxyCapsuleTransforms, POSE_IDX, type ShadowCamera, type CapsuleXf } from './shadowGeom'
 
 // камера у балконной двери смотрит на восток (как плейт гостиной)
 const CAM: ShadowCamera = {
@@ -72,6 +72,24 @@ describe('passesFloorGate (F sanity-gate §5)', () => {
   })
   it('нечисловой/NaN сэмпл (битый EXR-пиксель) → отвергаем', () => {
     expect(passesFloorGate([3, 1, NaN], 0.0)).toBe(false)
+  })
+})
+
+describe('selectShadowMode (§5/§6 бинарный выбор, ladder в D2)', () => {
+  it('поза + F прошёл gate → proxy', () => {
+    expect(selectShadowMode({ hasPose: true, F: [3, 1, 0.0], floorZ: 0, hasShadowData: true })).toBe('proxy')
+  })
+  it('поза, но F отвергнут gate (стена) → room', () => {
+    expect(selectShadowMode({ hasPose: true, F: [3, 1, 1.6], floorZ: 0, hasShadowData: true })).toBe('room')
+  })
+  it('нет позы, но shadowData есть → room', () => {
+    expect(selectShadowMode({ hasPose: false, F: [3, 1, 0.0], floorZ: 0, hasShadowData: true })).toBe('room')
+  })
+  it('нет shadowData → silhouette', () => {
+    expect(selectShadowMode({ hasPose: true, F: [3, 1, 0.0], floorZ: 0, hasShadowData: false })).toBe('silhouette')
+  })
+  it('F=null → room (не proxy)', () => {
+    expect(selectShadowMode({ hasPose: true, F: null, floorZ: 0, hasShadowData: true })).toBe('room')
   })
 })
 

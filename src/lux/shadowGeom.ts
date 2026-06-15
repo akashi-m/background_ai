@@ -48,6 +48,21 @@ export function passesFloorGate(F: Vec3, floorZ: number): boolean {
   return Math.abs(F[2] - floorZ) <= Z_THR
 }
 
+export type ShadowMode = 'proxy' | 'crossfade' | 'room' | 'silhouette'
+
+// Выбор пути тени (§5/§6). В Phase C — бинарный по факту позы + F sanity-gate;
+// crossfade/гистерезис (POSE_ENTER/POSE_DROP) добавит D2 поверх ('crossfade' пока не возвращается).
+export function selectShadowMode(s: {
+  hasPose: boolean
+  F: Vec3 | null
+  floorZ: number
+  hasShadowData: boolean
+}): ShadowMode {
+  if (!s.hasShadowData) return 'silhouette'
+  if (s.hasPose && s.F !== null && passesFloorGate(s.F, s.floorZ)) return 'proxy'
+  return 'room'
+}
+
 export function personFloorWorld(t: PersonTelemetry, cam: ShadowCamera, floorZ: number): PersonOnFloor {
   const fwd = norm(sub(cam.target, cam.pos))
   // правый вектор (горизонталь): fwd × up(0,0,1)

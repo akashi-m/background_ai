@@ -17,7 +17,7 @@ import { LuxCompositor, type HarmonizeToggles } from './lux/compositor'
 import { IdleSlides } from './lux/idle'
 import { loadLutTexture } from './lux/lut'
 import { shadowFromBbox, SmoothedShadow } from './lux/shadow'
-import { personFloorWorld, sampleWorldXYZ } from './lux/shadowGeom'
+import { personFloorWorld, sampleWorldXYZ, selectShadowMode, PoseSmoother } from './lux/shadowGeom'
 import { parseDevFlags } from './lux/devFlags'
 import { LuxUI, interiorLabels } from './lux/ui'
 
@@ -142,6 +142,7 @@ async function start() {
   // физическая тень: сглаженные точка ног F и рост H посетителя в мире
   let smoothF: [number, number, number] | null = null
   let smoothH = 1.7
+  const poseSmoother = new PoseSmoother()
 
   let last = performance.now()
   renderer.setAnimationLoop((now) => {
@@ -222,6 +223,12 @@ async function start() {
         camera: active.shadowData.camera,
       } : null,
       personFloor,
+      pose: (() => {
+        if (!sd || !smoothF || !t?.pose) return null
+        const mode = selectShadowMode({ hasPose: true, F: smoothF, floorZ: sd.floorZ, hasShadowData: true })
+        if (mode !== 'proxy') return null
+        return { world: poseSmoother.push(t.pose.world, dt), healthy: t.pose.healthy }
+      })(),
       feetUV,
       shadowCfg: LUX_CONFIG.shadow,
       lut: luts[switcher.index],

@@ -467,6 +467,7 @@ export class LuxCompositor {
     shadowStrength: number
     shadowData: { lamps: { pos: [number, number, number]; weight: number }[]; worldPos: THREE.Texture; floorZ: number; camera: ShadowCamera } | null
     personFloor: { F: [number, number, number]; H: number } | null
+    pose: { world: number[][]; healthy: number } | null
     feetUV: { u: number; v: number; halfW: number } | null
     shadowCfg: { strength: number; softness: number; bias: number }
     lut: THREE.Data3DTexture
@@ -556,6 +557,16 @@ export class LuxCompositor {
             { lamps: opts.shadowData.lamps, camera: opts.shadowData.camera, floorZ: opts.shadowData.floorZ },
             this.renderer,
           )
+        }
+        // C: при наличии (сглаженной, gated) позы — гоним прокси по ногам и делаем его кастером;
+        // без позы остаётся статический кастер (за кадром → тело-тень не рисуется, blob держит контакт).
+        if (opts.pose) {
+          this.shadowScene3D.proxyRig.update(
+            opts.pose.world,
+            new THREE.Vector3(opts.personFloor.F[0], opts.personFloor.F[1], opts.personFloor.F[2]),
+            opts.personFloor.H,
+          )
+          this.shadowScene3D.setCaster(this.shadowScene3D.proxyRig.object)
         }
         const prevClear = new THREE.Color()
         this.renderer.getClearColor(prevClear)

@@ -39,4 +39,24 @@ describe('parseTelemetry', () => {
   it('лишние ключи игнорируются (вперёд-совместимость)', () => {
     expect(parseTelemetry({ ...VALID, joints: [1, 2, 3] })).not.toBeNull()
   })
+
+  it('parseTelemetry: pose отсутствует → pose undefined, презенс жив', () => {
+    const t = parseTelemetry({ type: 'presence', present: true })
+    expect(t).not.toBeNull()
+    expect(t!.pose).toBeUndefined()
+  })
+  it('parseTelemetry: валидный pose парсится (world 33×4, healthy)', () => {
+    const world = Array.from({ length: 33 }, () => [0.1, 0.2, 0.3, 0.9])
+    const t = parseTelemetry({ type: 'presence', present: true, pose: { world, norm: world, healthy: 0.8 } })
+    expect(t!.pose).toBeDefined()
+    expect(t!.pose!.world.length).toBe(33)
+    expect(t!.pose!.healthy).toBe(0.8)
+  })
+  it('parseTelemetry: битый pose → pose undefined, НО презенс НЕ null (поток жив)', () => {
+    const t = parseTelemetry({ type: 'presence', present: true, bbox: [0.1, 0.2, 0.6, 1.0], pose: 'garbage' })
+    expect(t).not.toBeNull()
+    expect(t!.present).toBe(true)
+    expect(t!.bbox).toEqual([0.1, 0.2, 0.6, 1.0])
+    expect(t!.pose).toBeUndefined()
+  })
 })

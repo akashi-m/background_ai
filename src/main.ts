@@ -51,6 +51,10 @@ async function start() {
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
   renderer.toneMapping = THREE.ACESFilmicToneMapping
   renderer.autoClear = false
+  // physical-тень прокси (spec §4.0): без shadowMap.enabled castShadow молча
+  // игнорируется → тень не появляется. mapSize/bias на самой лампе (keyPointLights).
+  renderer.shadowMap.enabled = true
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap
   document.body.appendChild(renderer.domElement)
 
   const compositor = new LuxCompositor(

@@ -7,6 +7,8 @@ import * as THREE from 'three'
 import { LUX_CONFIG } from './config'
 import { makeMultiplyBlitMat } from './multiplyBlit'
 import type { ShadowEllipse } from './shadow'
+import type { ShadowCamera } from './shadowGeom'
+import { ShadowScene3D } from './shadowScene3D'
 
 export interface HarmonizeToggles {
   lut: boolean
@@ -65,6 +67,7 @@ export class LuxCompositor {
   private blobMat: THREE.ShaderMaterial // контактная «тень-капля», приклеена к ступням
   private multiplyBlitMat: THREE.ShaderMaterial // multiply-blit physical-тени (B1.9 wiring)
   private fadeMat: THREE.MeshBasicMaterial
+  private shadowScene3D: ShadowScene3D | null = null // B1: реальный 3D-рендер прокси-тени (lazy)
 
   constructor(
     private renderer: THREE.WebGLRenderer,
@@ -462,7 +465,7 @@ export class LuxCompositor {
     mirrorOpacity: number
     shadow: ShadowEllipse | null
     shadowStrength: number
-    shadowData: { lamps: { pos: [number, number, number]; weight: number }[]; worldPos: THREE.Texture; floorZ: number; cameraPos: [number, number, number] } | null
+    shadowData: { lamps: { pos: [number, number, number]; weight: number }[]; worldPos: THREE.Texture; floorZ: number; camera: ShadowCamera } | null
     personFloor: { F: [number, number, number]; H: number } | null
     feetUV: { u: number; v: number; halfW: number } | null
     shadowCfg: { strength: number; softness: number; bias: number }
@@ -546,28 +549,58 @@ export class LuxCompositor {
     // кроме зоны у ступней → мягкое пятно по форме стоп, без привязки к ногам).
     if (mirrorVisible && opts.toggles.shadow && opts.person) {
       if (opts.shadowData && opts.personFloor) {
-        const u = this.roomShadowMat.uniforms
-        u.tBg.value = this.compositeRT.texture
-        u.tWorld.value = opts.shadowData.worldPos
-        u.tVideo.value = opts.person
-        u.uUvScale.value.copy(this.coverMat.uniforms.uUvScale.value)
-        u.uVideoAspect.value = opts.personAspect ?? 0.5625
-        u.uF.value.set(opts.personFloor.F[0], opts.personFloor.F[1], opts.personFloor.F[2])
-        u.uH.value = opts.personFloor.H
-        u.uCamPos.value.set(opts.shadowData.cameraPos[0], opts.shadowData.cameraPos[1], opts.shadowData.cameraPos[2])
-        const lamps = opts.shadowData.lamps
-        u.uNLamps.value = Math.min(3, lamps.length)
-        if (lamps[0]) u.uLamp0.value.set(lamps[0].pos[0], lamps[0].pos[1], lamps[0].pos[2])
-        if (lamps[1]) u.uLamp1.value.set(lamps[1].pos[0], lamps[1].pos[1], lamps[1].pos[2])
-        if (lamps[2]) u.uLamp2.value.set(lamps[2].pos[0], lamps[2].pos[1], lamps[2].pos[2])
-        u.uW.value.set(lamps[0]?.weight ?? 0, lamps[1]?.weight ?? 0, lamps[2]?.weight ?? 0)
-        u.uStrength.value = opts.shadowCfg.strength
-        u.uBias.value = opts.shadowCfg.bias
-        u.uSoft.value = opts.shadowCfg.softness
-        u.uOpacity.value = opts.mirrorOpacity
-        this.pass(this.roomShadowMat, this.shadowRT)
-        this.blitMat.uniforms.tSrc.value = this.shadowRT.texture
+        // B1 alignment: реальный 3D-рендер статического прокси в shadowRT (белый clear),
+        // затем multiply-blit с cover-fit на compositeRT. Pose-drive/лестница — Фазы C/D2.
+        if (!this.shadowScene3D) {
+          this.shadowScene3D = new ShadowScene3D(
+            { lamps: opts.shadowData.lamps, camera: opts.shadowData.camera, floorZ: opts.shadowData.floorZ },
+            this.renderer,
+          )
+        }
+        const prevClear = new THREE.Color()
+        this.renderer.getClearColor(prevClear)
+        const prevAlpha = this.renderer.getClearAlpha()
+        this.renderer.setRenderTarget(this.shadowRT)
+        this.renderer.setClearColor(0xffffff, 1)
+        this.renderer.clear()
+        this.renderer.render(this.shadowScene3D.scene, this.shadowScene3D.camera)
+        this.renderer.setRenderTarget(null)
+        this.renderer.setClearColor(prevClear, prevAlpha)
+        const mbu = this.multiplyBlitMat.uniforms
+        mbu.tBg.value = this.compositeRT.texture
+        mbu.tShadow.value = this.shadowRT.texture
+        mbu.uUvScale.value.copy(this.coverMat.uniforms.uUvScale.value)
+        mbu.uShadowStrength.value = opts.shadowStrength
+        this.pass(this.multiplyBlitMat, this.shadowRT2)
+        this.blitMat.uniforms.tSrc.value = this.shadowRT2.texture
         this.pass(this.blitMat, this.compositeRT)
+
+        // (B1: заменено 3D-рендером выше; v1 roomShadowMat сохранён как fallback —
+        //  восстанавливается в D2-лестнице. Здесь обёрнут if(false) → код жив, но не исполняется.)
+        if (false as boolean) {
+          const u = this.roomShadowMat.uniforms
+          u.tBg.value = this.compositeRT.texture
+          u.tWorld.value = opts.shadowData.worldPos
+          u.tVideo.value = opts.person
+          u.uUvScale.value.copy(this.coverMat.uniforms.uUvScale.value)
+          u.uVideoAspect.value = opts.personAspect ?? 0.5625
+          u.uF.value.set(opts.personFloor.F[0], opts.personFloor.F[1], opts.personFloor.F[2])
+          u.uH.value = opts.personFloor.H
+          u.uCamPos.value.set(opts.shadowData.camera.pos[0], opts.shadowData.camera.pos[1], opts.shadowData.camera.pos[2])
+          const lamps = opts.shadowData.lamps
+          u.uNLamps.value = Math.min(3, lamps.length)
+          if (lamps[0]) u.uLamp0.value.set(lamps[0].pos[0], lamps[0].pos[1], lamps[0].pos[2])
+          if (lamps[1]) u.uLamp1.value.set(lamps[1].pos[0], lamps[1].pos[1], lamps[1].pos[2])
+          if (lamps[2]) u.uLamp2.value.set(lamps[2].pos[0], lamps[2].pos[1], lamps[2].pos[2])
+          u.uW.value.set(lamps[0]?.weight ?? 0, lamps[1]?.weight ?? 0, lamps[2]?.weight ?? 0)
+          u.uStrength.value = opts.shadowCfg.strength
+          u.uBias.value = opts.shadowCfg.bias
+          u.uSoft.value = opts.shadowCfg.softness
+          u.uOpacity.value = opts.mirrorOpacity
+          this.pass(this.roomShadowMat, this.shadowRT)
+          this.blitMat.uniforms.tSrc.value = this.shadowRT.texture
+          this.pass(this.blitMat, this.compositeRT)
+        }
       } else {
         const g = this.groundShadowMat.uniforms
         g.tVideo.value = opts.person

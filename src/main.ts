@@ -219,7 +219,7 @@ async function start() {
         lamps: active.shadowData.lamps,
         worldPos: active.shadowData.worldPos,
         floorZ: active.shadowData.floorZ,
-        cameraPos: active.shadowData.camera.pos,
+        camera: active.shadowData.camera,
       } : null,
       personFloor,
       feetUV,

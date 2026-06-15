@@ -19,6 +19,8 @@ class CaptureConfig(BaseModel):
     port: int = 8765             # aiohttp: /offer /ws /viewer /health
     models_dir: str = "models"   # куда скачаны модели (scripts/get-models.sh)
     bitrate_mbps: float = 8.0    # битрейт VP8 (loopback): резкость live-композита
+    pose_enabled: bool = True    # включать MediaPipe Pose в pipeline (v2-тень)
+    pose_model_path: str = ""    # override .task; пусто → {models_dir}/pose_landmarker_full.task
 
 
 def auto_bitrate_mbps(width: int, height: int) -> float:

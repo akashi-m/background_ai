@@ -73,3 +73,14 @@ def test_parse_args_ratio_out_of_range() -> None:
         parse_args(["--ratio", "1.5"])
     with pytest.raises(SystemExit):
         parse_args(["--ratio", "0"])
+
+
+def test_pose_config_defaults() -> None:
+    cfg = CaptureConfig()
+    assert cfg.pose_enabled is True
+    assert cfg.pose_model_path == ""
+
+
+def test_pose_model_path_override() -> None:
+    cfg = CaptureConfig(pose_model_path="/custom/pose.task")
+    assert cfg.pose_model_path == "/custom/pose.task"

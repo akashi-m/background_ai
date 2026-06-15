@@ -24,8 +24,14 @@
 7. **`shadowFloorK`/`blobRatio` (B5/B21/M8/M12):** читать из **`LUX_CONFIG.shadow.shadowFloorK` / `.blobRatio`**, НЕ из `opts.shadowCfg` (его тип не расширяем). Поля добавляются в `config.ts` **ровно раз — в D1.6** (самый ранний потребитель); D2.2 → verify/grep, без повторного цикла.
 8. **`multiplyBlitMat` — один модуль, GLSL1 end-to-end (M4/M6/M14):** хелперы живут в **`src/lux/multiplyBlit.ts`** (`multiplyShadowTerm`, `coverUv`, `makeMultiplyBlitMat`), тест `multiplyBlit.test.ts`. Шейдер **GLSL1**: `float shadowTerm = 1.0 - texture2D(tShadow, uv).r; ... gl_FragColor = vec4(texture2D(tBg, coverUv).rgb * m, 1.0);`, `coverUv=(vUv-0.5)*uUvScale+0.5`. D2.4 НЕ создаёт второй `shadowMath.ts` и НЕ переходит на GLSL3 `texture()/out`.
 
-### B. Координатный базис (B8/M17 — критично для пиксель-alignment B1)
-9. **Всё в three Y-up.** `blenderToThree([x,y,z]) → [x, z, -y]` применяется **консистентно**: к вершинам `boxReceiver`/`roomMeshFromEXR`, к `F`, к вертикальной оси `H`, к капсулам `ProxyRig`, к камере и лампам. Плоскость пола НЕ ставить на `position.set(0,0,floorZ)` в Y-up (это вертикальная стена). Обязателен **один cross-component alignment-тест**: receiver + lamp + proxy в общем базисе → тень падает в ожидаемые экранные пиксели (это и есть exit B1 на НЕ-совпадающем canvas-аспекте).
+### B. Координатный базис (B8/M17 — критично для пиксель-alignment B1) — РЕШЕНО: всё в Blender Z-up
+9. **Единый базис — РОВНО Blender Z-up во всей shadow-сцене; НИКАКОГО `blenderToThree`/свопа.** EXR-worldPos, `lights.json`, `floorZ`, F/H — всё уже в Blender Z-up (X восток, Y север, Z вверх). Держим shadow-сцену в тех же координатах, чтобы **не трансформировать EXR-меш и F/H** (лишняя точка ошибок). Конкретно:
+   - `boxReceiver` — пол `position.set(0,0,floorZ)`, `PlaneGeometry` нормаль +Z (как в B1.2 — ВЕРНО); box'ы raw `min/max`.
+   - `bakedShadowCamera` — `camera.up.set(0,0,1)` **до** `lookAt`; `position`=`cam.pos`, `lookAt(cam.target)` — raw, без свопа. (Камера смотрит ~горизонтально → up=(0,0,1) не вырождается.)
+   - `keyPointLights` — raw позиции ламп (PointLight cube-shadow ориентационно-независим).
+   - `ProxyRig` — корень в F (raw Z-up), ось роста H = +Z.
+   - `roomMeshFromEXR` (B2) — вершины = raw EXR-сэмплы, без конверсии.
+   **Любые упоминания `blenderToThree`/`[x,z,-y]` в B1.3/B1.4/B1.5/B2 ОТМЕНЯЮТСЯ** — выкинуть своп, использовать raw Z-up + `camera.up=(0,0,1)`. Обязателен **один cross-component alignment-тест** (receiver+lamp+proxy в Z-up → тень в ожидаемых пикселях) — это exit B1, прогнать на НЕ-совпадающем canvas-аспекте.
 
 ### C. Единичность общих шагов (убрать дубли — иначе TDD-гейт ломается)
 10. **`sampleWorldXYZ` переносится РОВНО раз — в B1.1** (B18/B19/M25). B2.1 и C.1 заменяются на verify-гейт: `grep -n "export function sampleWorldXYZ" src/lux/shadowGeom.ts` → есть хит ⇒ no-op, skip (НЕ пере-добавлять тест, НЕ пере-удалять строки `main.ts`).

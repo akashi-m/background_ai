@@ -22,17 +22,23 @@ class PipelineLike(Protocol):
 
 def _telemetry_json(stats: PipelineStats) -> str:
     p = stats.presence
-    return json.dumps(
-        {
-            "type": "presence",
-            "present": p.present,
-            "distanceCm": p.distance_cm,
-            "coverage": round(p.coverage, 4),
-            "bbox": stats.bbox,  # нормированный (x0,y0,x1,y1); низ = «ноги» для тени
-            "errors": stats.errors,
-            "fps": round(stats.fps, 1),
+    payload: dict = {
+        "type": "presence",
+        "present": p.present,
+        "distanceCm": p.distance_cm,
+        "coverage": round(p.coverage, 4),
+        "bbox": stats.bbox,  # нормированный (x0,y0,x1,y1); низ = «ноги» для тени
+        "errors": stats.errors,
+        "fps": round(stats.fps, 1),
+    }
+    lm = stats.landmarks
+    if lm is not None:
+        payload["pose"] = {
+            "world": [[round(c, 4) for c in row] for row in lm.world],
+            "norm": [[round(c, 4) for c in row] for row in lm.norm],
+            "healthy": lm.healthy,
         }
-    )
+    return json.dumps(payload)
 
 
 async def _health(request: web.Request) -> web.Response:

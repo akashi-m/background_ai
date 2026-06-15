@@ -5,8 +5,9 @@ import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
 from capture.pipeline import PipelineStats
+from capture.pose_engine import PosePacket
 from capture.presence import PresenceState
-from capture.server import build_app
+from capture.server import _telemetry_json, build_app
 
 
 class FakePipeline:
@@ -105,3 +106,40 @@ async def test_frame_png_no_frame_yet() -> None:
         assert resp.status == 503
     finally:
         await c.close()
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for _telemetry_json pose key
+# ---------------------------------------------------------------------------
+
+
+def _stats_with(landmarks: PosePacket | None) -> PipelineStats:
+    return PipelineStats(
+        frames=1, fps=30.0,
+        presence=PresenceState(present=True, distance_cm=150.0, coverage=0.2),
+        bbox=(0.1, 0.2, 0.6, 1.0), errors=0, last_error=None,
+        landmarks=landmarks,
+    )
+
+
+def test_telemetry_omits_pose_when_absent() -> None:
+    msg = json.loads(_telemetry_json(_stats_with(None)))
+    assert "pose" not in msg
+    assert msg["type"] == "presence"
+    assert msg["bbox"] == [0.1, 0.2, 0.6, 1.0]
+
+
+def test_telemetry_includes_pose_when_present() -> None:
+    pkt = PosePacket(
+        world=[[0.123456, 0.2, 0.3, 0.95]] * 33,
+        norm=[[0.5, 0.6, 0.0, 0.95]] * 33,
+        healthy=0.875,
+    )
+    msg = json.loads(_telemetry_json(_stats_with(pkt)))
+    assert "pose" in msg
+    assert len(msg["pose"]["world"]) == 33
+    assert len(msg["pose"]["norm"]) == 33
+    assert msg["pose"]["healthy"] == 0.875
+    assert msg["pose"]["world"][0][0] == 0.1235
+    assert msg["present"] is True
+    assert msg["bbox"] == [0.1, 0.2, 0.6, 1.0]

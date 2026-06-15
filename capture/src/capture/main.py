@@ -7,6 +7,7 @@ from aiohttp import web
 from capture.config import parse_args
 from capture.matting import make_engine
 from capture.pipeline import Pipeline
+from capture.pose_engine import make_pose_engine
 from capture.presence import PresenceConfig
 from capture.server import build_app
 from capture.sources import make_source
@@ -37,12 +38,13 @@ def main(argv: list[str] | None = None) -> None:
         print(f"источник: {e}", file=sys.stderr)
         raise SystemExit(2) from e
     engine = make_engine(cfg)
+    pose = make_pose_engine(cfg)
 
     from capture.webrtc import configure_bitrate
 
     configure_bitrate(cfg.bitrate_mbps)  # до первого offer: энкодер читает глобалы
 
-    pipeline = Pipeline(source, engine, PresenceConfig())
+    pipeline = Pipeline(source, engine, PresenceConfig(), pose=pose)
     pipeline.start()
 
     app = build_app(pipeline)

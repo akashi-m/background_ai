@@ -16,4 +16,8 @@ mkdir -p models
 [ -f models/rvm_resnet50_fp32.onnx ] || curl -L -o models/rvm_resnet50_fp32.onnx \
   "https://github.com/PeterL1n/RobustVideoMatting/releases/download/v1.0.0/rvm_resnet50_fp32.onnx"
 
+# MediaPipe Pose Landmarker (v2-тень), full-вариант ~6 МБ
+[ -f models/pose_landmarker_full.task ] || curl -L -o models/pose_landmarker_full.task \
+  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task"
+
 ls -la models/

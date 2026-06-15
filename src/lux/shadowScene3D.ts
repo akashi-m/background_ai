@@ -104,3 +104,57 @@ export function bakedShadowCamera(cam: ShadowCamera): THREE.PerspectiveCamera {
   c.updateProjectionMatrix()
   return c
 }
+
+// Подмножество BuiltWorld['shadowData'], нужное ShadowScene3D. worldPos/worldPosData
+// опциональны: B1 box-приёмнику не нужны, B2 EXR-приёмник их использует.
+export interface ShadowData {
+  lamps: Lamp[]
+  camera: ShadowCamera
+  floorZ: number
+  boxes?: ReceiverBox[]
+  worldPos?: THREE.Texture
+  worldPosData?: { data: Float32Array; width: number; height: number }
+}
+
+export class ShadowScene3D {
+  scene: THREE.Scene
+  camera: THREE.PerspectiveCamera
+  caster!: THREE.Object3D
+  private receiverGroup = new THREE.Group()
+  private casterGroup = new THREE.Group()
+
+  constructor(shadowData: ShadowData, _renderer: THREE.WebGLRenderer) {
+    this.scene = new THREE.Scene()
+    this.camera = bakedShadowCamera(shadowData.camera)
+    for (const light of keyPointLights(shadowData.lamps)) this.scene.add(light)
+    this.scene.add(this.receiverGroup)
+    this.setReceiver(boxReceiver(shadowData.floorZ, shadowData.boxes ?? []))
+    this.scene.add(this.casterGroup)
+    // B1: статический тест-кастер (столбик в центре пола, рост 1.7); Phase C → setCaster(proxyRig.object)
+    this.setCaster(staticProxy([0, 0, shadowData.floorZ], 1.7))
+  }
+
+  // Замена приёмника (B2: box → EXR-mesh).
+  setReceiver(meshes: THREE.Object3D[]): void {
+    this.receiverGroup.clear()
+    for (const m of meshes) this.receiverGroup.add(m)
+  }
+
+  // Замена кастера (Phase C: staticProxy → ProxyRig.object).
+  setCaster(obj: THREE.Object3D): void {
+    this.casterGroup.clear()
+    this.caster = obj
+    this.casterGroup.add(obj)
+  }
+
+  // B1: no-op (прокси статический). Phase C: proxyRig.update(pose.world, F, H) + ShadowMaterial.opacity=shadowStrength.
+  // 4-арг канон (§A.2): shadowStrength опционален (дефолт 1) → 3-арг вызовы C.6 компилируются, D передаёт силу.
+  update(
+    _pose: { world: number[][]; norm: number[][]; healthy: number } | null,
+    _personFloor: { F: THREE.Vector3; H: number },
+    _shadowData: ShadowData,
+    _shadowStrength = 1,
+  ): void {
+    // pose-drive — Phase C
+  }
+}

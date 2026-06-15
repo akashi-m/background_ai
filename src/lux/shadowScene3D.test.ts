@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import * as THREE from 'three'
-import { boxReceiver, bakedShadowCamera, staticProxy, keyPointLights } from './shadowScene3D'
+import { boxReceiver, bakedShadowCamera, staticProxy, keyPointLights, ShadowScene3D } from './shadowScene3D'
 import type { ShadowCamera } from './shadowGeom'
 
 describe('boxReceiver', () => {
@@ -163,5 +163,78 @@ describe('keyPointLights', () => {
     expect(lights[1].position.y).toBeCloseTo(2, 6)
     expect(lights[1].position.z).toBeCloseTo(2.5, 6)
     expect(lights[1].intensity).toBeGreaterThan(lights[0].intensity)
+  })
+})
+
+describe('ShadowScene3D (B1 сборка)', () => {
+  const shadowData = {
+    lamps: [
+      { pos: [1, 1, 2] as [number, number, number], weight: 1.0 },
+      { pos: [-1, 2, 2] as [number, number, number], weight: 0.5 },
+    ],
+    camera: {
+      pos: [0, -5, 1.6] as [number, number, number],
+      target: [0, 0, 1.6] as [number, number, number],
+      fovY: Math.PI / 3,
+      aspect: 0.5625,
+    },
+    floorZ: 0,
+    boxes: [{ min: [-1, -1, 0] as [number, number, number], max: [1, 1, 2] as [number, number, number] }],
+  }
+  const fakeRenderer = {} as THREE.WebGLRenderer
+
+  it('экспонирует scene (THREE.Scene) и camera (PerspectiveCamera, fov=60)', () => {
+    const s = new ShadowScene3D(shadowData, fakeRenderer)
+    expect(s.scene).toBeInstanceOf(THREE.Scene)
+    expect(s.camera).toBeInstanceOf(THREE.PerspectiveCamera)
+    expect(s.camera.fov).toBeCloseTo(60, 4)
+  })
+
+  it('в сцене PointLight-и по числу ламп и ровно один castShadow', () => {
+    const s = new ShadowScene3D(shadowData, fakeRenderer)
+    const lights: THREE.PointLight[] = []
+    s.scene.traverse((o) => { if ((o as THREE.PointLight).isPointLight) lights.push(o as THREE.PointLight) })
+    expect(lights.length).toBe(2)
+    expect(lights.filter((l) => l.castShadow).length).toBe(1)
+  })
+
+  it('в сцене приёмник (ShadowMaterial, receiveShadow) и кастер (castShadow)', () => {
+    const s = new ShadowScene3D(shadowData, fakeRenderer)
+    let receivers = 0, casters = 0
+    s.scene.traverse((o) => {
+      const m = o as THREE.Mesh
+      if (!m.isMesh) return
+      if (m.receiveShadow && m.material instanceof THREE.ShadowMaterial) receivers++
+      if (m.castShadow) casters++
+    })
+    expect(receivers).toBeGreaterThanOrEqual(2) // пол + 1 box
+    expect(casters).toBeGreaterThanOrEqual(1)    // static proxy
+  })
+
+  it('setReceiver заменяет приёмник (B2 swap box→mesh)', () => {
+    const s = new ShadowScene3D(shadowData, fakeRenderer)
+    const nr = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShadowMaterial())
+    nr.receiveShadow = true
+    ;(nr as unknown as { __tag: string }).__tag = 'b2'
+    s.setReceiver([nr])
+    let found = false
+    s.scene.traverse((o) => { if ((o as unknown as { __tag?: string }).__tag === 'b2') found = true })
+    expect(found).toBe(true)
+  })
+
+  it('setCaster заменяет кастер (Phase C: staticProxy→ProxyRig)', () => {
+    const s = new ShadowScene3D(shadowData, fakeRenderer)
+    const tag = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.5), new THREE.MeshBasicMaterial())
+    tag.castShadow = true
+    s.setCaster(tag)
+    expect(s.caster).toBe(tag)
+    let found = false
+    s.scene.traverse((o) => { if (o === tag) found = true })
+    expect(found).toBe(true)
+  })
+
+  it('update не бросает в B1 (статический прокси; pose-drive — Фаза C)', () => {
+    const s = new ShadowScene3D(shadowData, fakeRenderer)
+    expect(() => s.update(null, { F: new THREE.Vector3(0, 0, 0), H: 1.7 }, shadowData)).not.toThrow()
   })
 })

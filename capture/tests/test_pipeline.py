@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 
 from capture.pipeline import Pipeline, PipelineStats
+from capture.pose_engine import PosePacket
 from capture.presence import PresenceConfig
 
 
@@ -146,5 +147,61 @@ def test_pipeline_survives_engine_errors(tmp_path: Path) -> None:
         assert s.last_error is not None and "boom" in s.last_error
         assert s.frames > 1                      # поток жив, кадры идут
         assert p.latest_sbs() is not None
+    finally:
+        p.stop()
+
+
+class FakePoseEngine:
+    """Возвращает фиксированный PosePacket на каждый кадр; считает вызовы."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.last_t_ms: float | None = None
+
+    def process(self, rgb: np.ndarray, t_ms: float) -> PosePacket:
+        self.calls += 1
+        self.last_t_ms = t_ms
+        return PosePacket(world=[[0.0, 0.0, 0.0, 1.0]] * 33,
+                          norm=[[0.5, 0.5, 0.0, 1.0]] * 33, healthy=1.0)
+
+
+def test_pipeline_landmarks_default_none() -> None:
+    p = Pipeline(StallingSource(frames=5), FakeEngine(), PresenceConfig())
+    assert p.stats().landmarks is None
+
+
+def test_pipeline_populates_landmarks_when_pose_present(tmp_path: Path) -> None:
+    clip = tmp_path / "pose.mp4"
+    make_clip(clip, frames=30, w=64, h=48)
+    from capture.sources.file import FileSource
+
+    pose = FakePoseEngine()
+    p = Pipeline(FileSource(str(clip)), FakeEngine(), PresenceConfig(), pose=pose)
+    p.start()
+    try:
+        deadline = time.monotonic() + 5.0
+        while p.stats().landmarks is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        lm = p.stats().landmarks
+        assert lm is not None
+        assert lm.healthy == 1.0
+        assert len(lm.world) == 33
+        assert pose.calls > 0
+    finally:
+        p.stop()
+
+
+def test_pipeline_skips_pose_when_none(tmp_path: Path) -> None:
+    clip = tmp_path / "nopose.mp4"
+    make_clip(clip, frames=20, w=64, h=48)
+    from capture.sources.file import FileSource
+
+    p = Pipeline(FileSource(str(clip)), FakeEngine(), PresenceConfig())
+    p.start()
+    try:
+        deadline = time.monotonic() + 5.0
+        while p.latest_sbs() is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert p.stats().landmarks is None
     finally:
         p.stop()

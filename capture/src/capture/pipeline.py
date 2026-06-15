@@ -3,13 +3,18 @@
 import threading
 import time
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from capture.compose import pack_sbs
 from capture.frames import FrameSource
 from capture.matting import MattingEngine
+from capture.pose_engine import PosePacket
 from capture.presence import PresenceConfig, PresenceState, PresenceTracker
+
+if TYPE_CHECKING:
+    from capture.pose_engine import PoseEngine
 
 
 @dataclass(frozen=True)
@@ -23,6 +28,7 @@ class PipelineStats:
     bbox: tuple[float, float, float, float] | None = None
     errors: int = 0
     last_error: str | None = None
+    landmarks: PosePacket | None = None
 
 
 def _mask_stats(
@@ -43,14 +49,20 @@ def _mask_stats(
 
 class Pipeline:
     def __init__(
-        self, source: FrameSource, engine: MattingEngine, presence_cfg: PresenceConfig
+        self,
+        source: FrameSource,
+        engine: MattingEngine,
+        presence_cfg: PresenceConfig,
+        pose: "PoseEngine | None" = None,
     ) -> None:
         self._source = source
         self._engine = engine
         self._presence = PresenceTracker(presence_cfg)
+        self._pose = pose
         self._lock = threading.Lock()
         self._sbs: np.ndarray | None = None
         self._bbox: tuple[float, float, float, float] | None = None
+        self._landmarks: PosePacket | None = None
         self._frames = 0
         self._fps = 0.0
         self._errors = 0
@@ -77,7 +89,7 @@ class Pipeline:
         with self._lock:
             return PipelineStats(
                 self._frames, self._fps, self._presence.state, self._bbox,
-                self._errors, self._last_error,
+                self._errors, self._last_error, self._landmarks,
             )
 
     def _run(self) -> None:
@@ -101,11 +113,17 @@ class Pipeline:
                 coverage, bbox_h, bbox = _mask_stats(alpha)
                 self._presence.update(coverage=coverage, bbox_height_ratio=bbox_h)
                 sbs = pack_sbs(fg, alpha)
+                pose_pkt = (
+                    self._pose.process(frame.rgb, frame.t_ms)
+                    if self._pose is not None
+                    else None
+                )
                 now = time.monotonic()
                 window_frames += 1
                 with self._lock:
                     self._sbs = sbs
                     self._bbox = bbox
+                    self._landmarks = pose_pkt
                     self._frames += 1
                     if now - window_start >= 1.0:
                         self._fps = window_frames / (now - window_start)

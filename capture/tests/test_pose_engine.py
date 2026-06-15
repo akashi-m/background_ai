@@ -3,6 +3,7 @@ import dataclasses
 import numpy as np
 
 import capture.pose_engine as pe_mod
+from capture.config import CaptureConfig
 from capture.pose_engine import (
     POSE_VIS_THRESH,
     PoseEngine,
@@ -136,3 +137,38 @@ def test_process_returns_none_when_no_pose(monkeypatch) -> None:
     eng, detector = _make_engine(_FakeResult([1.0] * 33, [1.0] * 33))
     detector._result = _Empty()  # type: ignore[assignment]
     assert eng.process(rgb, 0.0) is None
+
+
+def test_make_pose_engine_disabled_returns_none() -> None:
+    from capture.pose_engine import make_pose_engine
+
+    cfg = CaptureConfig(pose_enabled=False)
+    assert make_pose_engine(cfg) is None
+
+
+def test_make_pose_engine_default_path(monkeypatch) -> None:
+    import capture.pose_engine as pe
+
+    captured: dict[str, str] = {}
+
+    def _fake_ctor(model_path: str) -> object:
+        captured["path"] = model_path
+        return object()
+
+    monkeypatch.setattr(pe, "PoseEngine", _fake_ctor)
+    cfg = CaptureConfig(models_dir="models", pose_enabled=True, pose_model_path="")
+    eng = pe.make_pose_engine(cfg)
+    assert eng is not None
+    assert captured["path"] == "models/pose_landmarker_full.task"
+
+
+def test_make_pose_engine_override_path(monkeypatch) -> None:
+    import capture.pose_engine as pe
+
+    captured: dict[str, str] = {}
+    monkeypatch.setattr(
+        pe, "PoseEngine", lambda model_path: captured.__setitem__("path", model_path)
+    )
+    cfg = CaptureConfig(models_dir="models", pose_enabled=True, pose_model_path="/custom/p.task")
+    pe.make_pose_engine(cfg)  # fake ctor records path, returns None — мы проверяем путь
+    assert captured["path"] == "/custom/p.task"

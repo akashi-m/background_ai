@@ -2,6 +2,7 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import mediapipe as mp
 import numpy as np
@@ -11,6 +12,9 @@ from mediapipe.tasks.python.vision import (
     PoseLandmarkerOptions,
     RunningMode,
 )
+
+if TYPE_CHECKING:
+    from capture.config import CaptureConfig
 
 # Порог видимости joint'а для healthy-метрики (spec §3.3, контракт POSE_VIS_THRESH).
 POSE_VIS_THRESH = 0.5
@@ -67,3 +71,13 @@ class PoseEngine:
         ]
         healthy = healthy_fraction([row[3] for row in world])
         return PosePacket(world=world, norm=norm, healthy=healthy)
+
+
+def make_pose_engine(cfg: "CaptureConfig") -> "PoseEngine | None":
+    if not cfg.pose_enabled:
+        return None
+    # импорт модуля, чтобы тесты подменяли PoseEngine через monkeypatch (как make_engine).
+    import capture.pose_engine as pose_mod
+
+    path = cfg.pose_model_path or f"{cfg.models_dir}/pose_landmarker_full.task"
+    return pose_mod.PoseEngine(path)

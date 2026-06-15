@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import * as THREE from 'three'
-import { boxReceiver } from './shadowScene3D'
+import { boxReceiver, bakedShadowCamera } from './shadowScene3D'
+import type { ShadowCamera } from './shadowGeom'
 
 describe('boxReceiver', () => {
   it('возвращает пол + по мешу на каждый box', () => {
@@ -42,5 +43,45 @@ describe('boxReceiver', () => {
     expect(box.scale.x).toBeCloseTo(2, 6)
     expect(box.scale.y).toBeCloseTo(2, 6)
     expect(box.scale.z).toBeCloseTo(6, 6)
+  })
+})
+
+describe('bakedShadowCamera', () => {
+  const cam: ShadowCamera = {
+    pos: [0, -5, 1.6],       // Blender Z-up: камера сзади (−Y), высота Z=1.6
+    target: [0, 0, 1.6],     // смотрит в начало по +Y
+    fovY: Math.PI / 3,       // 60° в радианах
+    aspect: 0.5625,          // 9:16 портрет
+  }
+
+  it('fov переведён в градусы из радиан fovY', () => {
+    expect(bakedShadowCamera(cam).fov).toBeCloseTo(60, 4)
+  })
+
+  it('aspect взят из camera.aspect', () => {
+    expect(bakedShadowCamera(cam).aspect).toBeCloseTo(0.5625, 6)
+  })
+
+  it('matrixAutoUpdate выключен (матрица запечена)', () => {
+    expect(bakedShadowCamera(cam).matrixAutoUpdate).toBe(false)
+  })
+
+  it('запечённая matrixWorld ставит камеру в RAW Blender Z-up позицию (без свопа)', () => {
+    const c = bakedShadowCamera(cam)
+    const p = new THREE.Vector3().setFromMatrixPosition(c.matrixWorld)
+    expect(p.x).toBeCloseTo(0, 5)
+    expect(p.y).toBeCloseTo(-5, 5)
+    expect(p.z).toBeCloseTo(1.6, 5)
+  })
+
+  it('камера смотрит на target (forward -Z указывает на target в Z-up базисе)', () => {
+    const c = bakedShadowCamera(cam)
+    const eye = new THREE.Vector3().setFromMatrixPosition(c.matrixWorld)
+    const tgt = new THREE.Vector3(0, 0, 1.6) // raw Z-up
+    const wantDir = tgt.clone().sub(eye).normalize()
+    const fwd = new THREE.Vector3(0, 0, -1).applyMatrix4(
+      new THREE.Matrix4().extractRotation(c.matrixWorld),
+    ).normalize()
+    expect(fwd.dot(wantDir)).toBeCloseTo(1, 4)
   })
 })

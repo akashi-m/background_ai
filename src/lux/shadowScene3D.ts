@@ -3,6 +3,7 @@
 // Рендерится в shadowRT, multiply-blit на compositeRT (compositor.ts).
 // Базис: Blender Z-up во всей сцене (камера up=(0,0,1)); без координатного свопа.
 import * as THREE from 'three'
+import type { ShadowCamera } from './shadowGeom'
 
 // Box задаётся axis-aligned min/max в Blender Z-up мировых координатах.
 export interface ReceiverBox { min: [number, number, number]; max: [number, number, number] }
@@ -32,4 +33,24 @@ export function boxReceiver(floorZ: number, boxes: ReceiverBox[]): THREE.Mesh[] 
     meshes.push(mesh)
   }
   return meshes
+}
+
+// Запечённая камера тени = ровно Blender-камера плейта (lights.json.camera).
+// Базис: Blender Z-up во всей сцене → camera.up=(0,0,1), БЕЗ свопа координат
+// (приёмник boxReceiver/EXR-mesh тоже в Z-up). matrixAutoUpdate=false: мировую
+// матрицу собираем вручную (lookAt в Z-up), чтобы тень проецировалась в те же
+// пиксели, что геометрия на плоском плейте (spec §4.3, reconcile §B.9).
+export function bakedShadowCamera(cam: ShadowCamera): THREE.PerspectiveCamera {
+  const c = new THREE.PerspectiveCamera(THREE.MathUtils.radToDeg(cam.fovY), cam.aspect, 0.05, 100)
+  c.matrixAutoUpdate = false
+  const eye = new THREE.Vector3(cam.pos[0], cam.pos[1], cam.pos[2])
+  const tgt = new THREE.Vector3(cam.target[0], cam.target[1], cam.target[2])
+  // lookAt строит ориентацию; up = Blender world-up = (0,0,1) (камера не закручена)
+  const m = new THREE.Matrix4().lookAt(eye, tgt, new THREE.Vector3(0, 0, 1))
+  m.setPosition(eye)
+  c.matrix.copy(m)
+  c.matrixWorld.copy(m)          // нет родителя → world = local
+  c.matrixWorldNeedsUpdate = false
+  c.updateProjectionMatrix()
+  return c
 }

@@ -550,41 +550,40 @@ export class LuxCompositor {
     // кроме зоны у ступней → мягкое пятно по форме стоп, без привязки к ногам).
     if (mirrorVisible && opts.toggles.shadow && opts.person) {
       if (opts.shadowData && opts.personFloor) {
-        // B1 alignment: реальный 3D-рендер статического прокси в shadowRT (белый clear),
-        // затем multiply-blit с cover-fit на compositeRT. Pose-drive/лестница — Фазы C/D2.
-        if (!this.shadowScene3D) {
-          this.shadowScene3D = new ShadowScene3D(
-            { lamps: opts.shadowData.lamps, camera: opts.shadowData.camera, floorZ: opts.shadowData.floorZ },
-            this.renderer,
-          )
-        }
-        // C: при наличии (сглаженной, gated) позы — гоним прокси по ногам и делаем его кастером;
-        // без позы остаётся статический кастер (за кадром → тело-тень не рисуется, blob держит контакт).
+        // C: proxy-тень рисуется ТОЛЬКО при наличии (сглаженной, gated) позы. Нет позы →
+        // тело-тень не рисуем (blob держит контакт; D2 добавит roomShadowMat-fallback). Так
+        // прокси не «замерзает» в последней позе при потере трекинга (ревью C.6).
         if (opts.pose) {
+          if (!this.shadowScene3D) {
+            this.shadowScene3D = new ShadowScene3D(
+              { lamps: opts.shadowData.lamps, camera: opts.shadowData.camera, floorZ: opts.shadowData.floorZ },
+              this.renderer,
+            )
+          }
           this.shadowScene3D.proxyRig.update(
             opts.pose.world,
             new THREE.Vector3(opts.personFloor.F[0], opts.personFloor.F[1], opts.personFloor.F[2]),
             opts.personFloor.H,
           )
           this.shadowScene3D.setCaster(this.shadowScene3D.proxyRig.object)
+          const prevClear = new THREE.Color()
+          this.renderer.getClearColor(prevClear)
+          const prevAlpha = this.renderer.getClearAlpha()
+          this.renderer.setRenderTarget(this.shadowRT)
+          this.renderer.setClearColor(0xffffff, 1)
+          this.renderer.clear()
+          this.renderer.render(this.shadowScene3D.scene, this.shadowScene3D.camera)
+          this.renderer.setRenderTarget(null)
+          this.renderer.setClearColor(prevClear, prevAlpha)
+          const mbu = this.multiplyBlitMat.uniforms
+          mbu.tBg.value = this.compositeRT.texture
+          mbu.tShadow.value = this.shadowRT.texture
+          mbu.uUvScale.value.copy(this.coverMat.uniforms.uUvScale.value)
+          mbu.uShadowStrength.value = opts.shadowStrength
+          this.pass(this.multiplyBlitMat, this.shadowRT2)
+          this.blitMat.uniforms.tSrc.value = this.shadowRT2.texture
+          this.pass(this.blitMat, this.compositeRT)
         }
-        const prevClear = new THREE.Color()
-        this.renderer.getClearColor(prevClear)
-        const prevAlpha = this.renderer.getClearAlpha()
-        this.renderer.setRenderTarget(this.shadowRT)
-        this.renderer.setClearColor(0xffffff, 1)
-        this.renderer.clear()
-        this.renderer.render(this.shadowScene3D.scene, this.shadowScene3D.camera)
-        this.renderer.setRenderTarget(null)
-        this.renderer.setClearColor(prevClear, prevAlpha)
-        const mbu = this.multiplyBlitMat.uniforms
-        mbu.tBg.value = this.compositeRT.texture
-        mbu.tShadow.value = this.shadowRT.texture
-        mbu.uUvScale.value.copy(this.coverMat.uniforms.uUvScale.value)
-        mbu.uShadowStrength.value = opts.shadowStrength
-        this.pass(this.multiplyBlitMat, this.shadowRT2)
-        this.blitMat.uniforms.tSrc.value = this.shadowRT2.texture
-        this.pass(this.blitMat, this.compositeRT)
 
         // (B1: заменено 3D-рендером выше; v1 roomShadowMat сохранён как fallback —
         //  восстанавливается в D2-лестнице. Здесь обёрнут if(false) → код жив, но не исполняется.)

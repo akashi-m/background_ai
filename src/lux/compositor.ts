@@ -4,6 +4,8 @@
 
 import * as THREE from 'three'
 
+import { LUX_CONFIG } from './config'
+import { makeMultiplyBlitMat } from './multiplyBlit'
 import type { ShadowEllipse } from './shadow'
 
 export interface HarmonizeToggles {
@@ -46,6 +48,7 @@ export class LuxCompositor {
   private meanRT: THREE.WebGLRenderTarget // 1×1 — средний цвет сцены (цвет-матч)
   private compositeRT: THREE.WebGLRenderTarget // весь композит до зерна
   private shadowRT: THREE.WebGLRenderTarget // целевой RT физической тени (read+write split)
+  private shadowRT2: THREE.WebGLRenderTarget // temp для multiply-blit read+write split (B1.9)
   private ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
   private passScene = new THREE.Scene()
   private passMeshes = new Map<THREE.Material, THREE.Mesh>() // кэш — без аллокаций в кадре
@@ -60,6 +63,7 @@ export class LuxCompositor {
   private groundShadowMat: THREE.ShaderMaterial // силуэтная контактная тень у ног
   private roomShadowMat: THREE.ShaderMaterial // физическая тень по мировым координатам комнаты
   private blobMat: THREE.ShaderMaterial // контактная «тень-капля», приклеена к ступням
+  private multiplyBlitMat: THREE.ShaderMaterial // multiply-blit physical-тени (B1.9 wiring)
   private fadeMat: THREE.MeshBasicMaterial
 
   constructor(
@@ -77,6 +81,7 @@ export class LuxCompositor {
     this.meanRT = new THREE.WebGLRenderTarget(1, 1)
     this.compositeRT = new THREE.WebGLRenderTarget(width, height)
     this.shadowRT = new THREE.WebGLRenderTarget(width, height)
+    this.shadowRT2 = new THREE.WebGLRenderTarget(width, height)
 
     this.blitMat = new THREE.ShaderMaterial({
       uniforms: { tSrc: { value: null } },
@@ -413,6 +418,9 @@ export class LuxCompositor {
       depthTest: false,
     })
 
+    this.multiplyBlitMat = makeMultiplyBlitMat()
+    this.multiplyBlitMat.uniforms.uShadowFloorK.value = LUX_CONFIG.shadow.shadowFloorK
+
     this.fadeMat = new THREE.MeshBasicMaterial({
       color: 0x000000, transparent: true, opacity: 0, depthTest: false,
     })
@@ -424,6 +432,7 @@ export class LuxCompositor {
     this.wrapRT_B.setSize(width >> 2, height >> 2)
     this.compositeRT.setSize(width, height)
     this.shadowRT.setSize(width, height)
+    this.shadowRT2.setSize(width, height)
   }
 
   private pass(mat: THREE.Material, target: THREE.WebGLRenderTarget | null): void {

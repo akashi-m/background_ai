@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>shadow-align (B1)</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #111; }
+    #c {
+      display: block; position: fixed;
+      top: 50%; left: 50%; transform: translate(-50%, -50%);
+    }
+    #info {
+      position: fixed; top: 8px; left: 8px; z-index: 10;
+      color: #fff; font: 12px/1.4 monospace;
+      background: rgba(0,0,0,0.55); padding: 6px 8px; border-radius: 4px;
+      white-space: pre; pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="info">shadow-align: loading…</div>
+  <script type="module" src="/src/lux/shadowAlign.ts"></script>
+</body>
+</html>

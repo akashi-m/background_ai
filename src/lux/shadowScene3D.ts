@@ -62,6 +62,29 @@ export function staticProxy(F: [number, number, number], H: number): THREE.Group
   return group
 }
 
+export interface Lamp { pos: [number, number, number]; weight: number }
+
+// Лампы → PointLight. castShadow ТОЛЬКО у Key (max weight): PointLight cube-shadow
+// дорог (6 граней) — fill-лампы вносят вклад только интенсивностью (spec §4.3).
+// Позиции RAW Blender Z-up (вся сцена Z-up, без свопа).
+export function keyPointLights(lamps: Lamp[]): THREE.PointLight[] {
+  let keyIdx = 0
+  for (let i = 1; i < lamps.length; i++) if (lamps[i].weight > lamps[keyIdx].weight) keyIdx = i
+
+  return lamps.map((lamp, i) => {
+    const light = new THREE.PointLight(0xffffff, lamp.weight)
+    light.position.set(lamp.pos[0], lamp.pos[1], lamp.pos[2]) // RAW Z-up
+    light.decay = 0 // запечённые позиции — без физ-затухания (как v1: вес = вклад)
+    if (i === keyIdx) {
+      light.castShadow = true
+      light.shadow.mapSize.set(2048, 2048)
+      light.shadow.bias = -0.0005
+      light.shadow.normalBias = 0.03
+    }
+    return light
+  })
+}
+
 // Запечённая камера тени = ровно Blender-камера плейта (lights.json.camera).
 // Базис: Blender Z-up во всей сцене → camera.up=(0,0,1), БЕЗ свопа координат
 // (приёмник boxReceiver/EXR-mesh тоже в Z-up). matrixAutoUpdate=false: мировую

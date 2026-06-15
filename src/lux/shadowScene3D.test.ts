@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import * as THREE from 'three'
-import { boxReceiver, bakedShadowCamera, staticProxy } from './shadowScene3D'
+import { boxReceiver, bakedShadowCamera, staticProxy, keyPointLights } from './shadowScene3D'
 import type { ShadowCamera } from './shadowGeom'
 
 describe('boxReceiver', () => {
@@ -125,5 +125,43 @@ describe('staticProxy (B1 invisible caster)', () => {
     expect(bbox.max.z).toBeGreaterThan(1.4)
     expect(bbox.max.z).toBeLessThanOrEqual(1.8 + 1e-3)
     expect(bbox.min.z).toBeCloseTo(0, 2)
+  })
+})
+
+describe('keyPointLights', () => {
+  const lamps = [
+    { pos: [1, 1, 2] as [number, number, number], weight: 0.4 },
+    { pos: [-1, 2, 2.5] as [number, number, number], weight: 1.0 }, // Key (max weight)
+    { pos: [0, -1, 2] as [number, number, number], weight: 0.6 },
+  ]
+
+  it('одна PointLight на каждую лампу', () => {
+    const lights = keyPointLights(lamps)
+    expect(lights.length).toBe(3)
+    lights.forEach((l) => expect(l).toBeInstanceOf(THREE.PointLight))
+  })
+
+  it('castShadow=true ТОЛЬКО у лампы с максимальным weight (Key)', () => {
+    const lights = keyPointLights(lamps)
+    expect(lights[0].castShadow).toBe(false)
+    expect(lights[1].castShadow).toBe(true)  // weight=1.0
+    expect(lights[2].castShadow).toBe(false)
+  })
+
+  it('Key shadow: mapSize 2048, bias -0.0005, normalBias 0.03', () => {
+    const key = keyPointLights(lamps).find((l) => l.castShadow)!
+    expect(key.shadow.mapSize.width).toBe(2048)
+    expect(key.shadow.mapSize.height).toBe(2048)
+    expect(key.shadow.bias).toBeCloseTo(-0.0005, 6)
+    expect(key.shadow.normalBias).toBeCloseTo(0.03, 6)
+  })
+
+  it('позиция лампы RAW Blender Z-up (без свопа); интенсивность ∝ weight', () => {
+    const lights = keyPointLights(lamps)
+    // lamps[1] RAW [-1,2,2.5] — без свопа
+    expect(lights[1].position.x).toBeCloseTo(-1, 6)
+    expect(lights[1].position.y).toBeCloseTo(2, 6)
+    expect(lights[1].position.z).toBeCloseTo(2.5, 6)
+    expect(lights[1].intensity).toBeGreaterThan(lights[0].intensity)
   })
 })

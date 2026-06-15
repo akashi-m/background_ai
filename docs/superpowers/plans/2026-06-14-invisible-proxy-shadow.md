@@ -1084,6 +1084,18 @@ Phase A is complete and verifiable when ALL of the following hold:
 
 No renderer code is touched in Phase A (PHASE BOUNDARIES: A = capture only). The renderer-side `Telemetry.pose` parse, `shadowMap.enabled`, `ShadowScene3D`, `ProxyRig`, and `multiplyBlitMat` are all out of scope here and land in B1/B2/C/D1/D2.
 
+### ✅ Phase A DONE — measured result + A.9b decision (2026-06-14)
+
+Commits: `5ebc76d` A.1 · `3a66f41` A.2 · `1c091ba` A.3 · `cd5a9ab` A.4 · `0a3debd` A.5 · `200c611` A.6 · `9371d72` A.7 · `f000bbb` A.8 mypy fixup · `c73b105` A.9 bench. **76 pytest pass, mypy strict 0 issues (17 files), ruff clean.** Each task passed implementer → spec-review → code-review (subagent-driven).
+
+**A.9 bench (real, this M-series mac, CPU, resnet50 ratio 0.4 @720p, n=60):**
+```
+RVM      median=252.8ms  p95=278.3ms
+Pose     median=  8.3ms  p95= 10.3ms
+RVM+Pose median=261.6ms  p95=286.4ms   → ~3.8 fps (tick 66.7ms overrun ×3.9)
+```
+**A.9b mitigation INTENTIONALLY NOT IMPLEMENTED (data-driven, independently reviewed).** Pose adds only ~8.3 ms = ~3% of the serial budget; the overrun is caused entirely by RVM resnet50 on CPU (252.8 ms) — a pre-existing, deliberately-accepted "качество > fps, GPU докупим" decision. Pose-every-other-frame / lite-pose would save ~4 ms of 261 ms = pointless. The throughput lever is GPU-offloading RVM (kiosk), not throttling pose. `pose_every_n` remains a documented future knob if RVM ever gets fast enough that the 8 ms matters. Phase-A exit criterion #3 is satisfied by this measurement+decision (pose meets its budget; throughput is RVM-bound and out of scope for the pose feature).
+
 ---
 
 ## Phase B1 — Renderer: alignment-скелет (box-receiver + baked camera + static proxy)

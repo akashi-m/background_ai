@@ -22,7 +22,7 @@ class PipelineLike(Protocol):
 
 def _telemetry_json(stats: PipelineStats) -> str:
     p = stats.presence
-    payload: dict = {
+    payload: dict[str, object] = {
         "type": "presence",
         "present": p.present,
         "distanceCm": p.distance_cm,

@@ -62,3 +62,33 @@ export function personFloorWorld(t: PersonTelemetry, cam: ShadowCamera, floorZ: 
   const H = Math.min(2.0, Math.max(1.4, t.bboxH * frameH))
   return { F, H }
 }
+
+// Временное сглаживание позы (спека §5/§8). exp-smooth как F/H в main.ts (k=1-exp(-dt*RATE)),
+// плюс ДОП. демпф z-оси: монокулярная глубина pose.world.z шумная и грубо откалибрована,
+// давим её сильнее xy (множитель Z_DAMP). Это убирает дрожь и маскирует транспортный
+// рассинхрон pose↔силуэт; НЕ даёт точной глубины — прокси схлопывается к фронто-параллели.
+const POSE_SMOOTH_RATE = 8   // как F/H (main.ts: k = 1-exp(-dt*8))
+const Z_DAMP = 0.35          // z-канал тянется к цели медленнее xy (0..1, меньше = жёстче демпф)
+
+export class PoseSmoother {
+  private prev: number[][] | null = null
+
+  push(target: number[][], dt: number): number[][] {
+    const k = 1 - Math.exp(-dt * POSE_SMOOTH_RATE)
+    if (this.prev === null) {
+      this.prev = target.map((lm) => [lm[0], lm[1], lm[2], lm[3]])
+      return this.prev.map((lm) => [lm[0], lm[1], lm[2], lm[3]])
+    }
+    const out: number[][] = []
+    for (let i = 0; i < target.length; i++) {
+      const p = this.prev[i] ?? target[i]
+      const t = target[i]
+      const x = p[0] + (t[0] - p[0]) * k
+      const y = p[1] + (t[1] - p[1]) * k
+      const z = p[2] + (t[2] - p[2]) * k * Z_DAMP // z тянется медленнее → демпф глубины
+      out.push([x, y, z, t[3]])                    // visibility — из цели, без сглаживания
+    }
+    this.prev = out.map((lm) => [lm[0], lm[1], lm[2], lm[3]])
+    return out
+  }
+}

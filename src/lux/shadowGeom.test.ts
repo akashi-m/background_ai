@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { passesFloorGate, personFloorWorld, sampleWorldXYZ, Z_THR, type ShadowCamera } from './shadowGeom'
+import { passesFloorGate, personFloorWorld, sampleWorldXYZ, Z_THR, PoseSmoother, type ShadowCamera } from './shadowGeom'
 
 // камера у балконной двери смотрит на восток (как плейт гостиной)
 const CAM: ShadowCamera = {
@@ -71,5 +71,53 @@ describe('passesFloorGate (F sanity-gate §5)', () => {
   })
   it('нечисловой/NaN сэмпл (битый EXR-пиксель) → отвергаем', () => {
     expect(passesFloorGate([3, 1, NaN], 0.0)).toBe(false)
+  })
+})
+
+describe('PoseSmoother (§5 exp-smooth + z-damp)', () => {
+  // мини-поза: 2 landmark'а [x,y,z,visibility] (тест не зависит от полных 33)
+  const A = [[0, 0, 0, 1], [1, 1, 1, 1]]
+  const B = [[10, 10, 10, 1], [11, 11, 11, 1]]
+
+  it('первый кадр проходит как есть (нет истории)', () => {
+    const s = new PoseSmoother()
+    const out = s.push(A, 0.016)
+    expect(out[0][0]).toBeCloseTo(0, 6)
+    expect(out[1][0]).toBeCloseTo(1, 6)
+  })
+
+  it('exp-smooth тянет к новой цели, не допрыгивая за один кадр', () => {
+    const s = new PoseSmoother()
+    s.push(A, 0.016)
+    const out = s.push(B, 0.016)
+    expect(out[0][0]).toBeGreaterThan(0)
+    expect(out[0][0]).toBeLessThan(10)
+    expect(out[0][0]).toBeCloseTo((10 - 0) * (1 - Math.exp(-0.016 * 8)), 4)
+  })
+
+  it('z демпфируется СИЛЬНЕЕ xy: при равном скачке z двигается медленнее x', () => {
+    const sx = new PoseSmoother()
+    sx.push(A, 0.016)
+    const out = sx.push(B, 0.016)
+    const dx = out[0][0] - 0
+    const dz = out[0][2] - 0
+    expect(dz).toBeLessThan(dx)
+    expect(dz).toBeGreaterThan(0)
+  })
+
+  it('visibility (канал 3) переносится из последней цели без сглаживания', () => {
+    const s = new PoseSmoother()
+    s.push(A, 0.016)
+    const out = s.push([[10, 10, 10, 0.42], [11, 11, 11, 0.9]], 0.016)
+    expect(out[0][3]).toBe(0.42)
+    expect(out[1][3]).toBe(0.9)
+  })
+
+  it('стабильный вход → выход сходится к нему (дрожь гаснет)', () => {
+    const s = new PoseSmoother()
+    for (let i = 0; i < 200; i++) s.push(B, 0.016)
+    const out = s.push(B, 0.016)
+    expect(out[0][0]).toBeCloseTo(10, 3)
+    expect(out[0][2]).toBeCloseTo(10, 3)
   })
 })

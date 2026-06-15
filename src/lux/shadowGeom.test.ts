@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { passesFloorGate, personFloorWorld, sampleWorldXYZ, Z_THR, PoseSmoother, type ShadowCamera } from './shadowGeom'
+import * as THREE from 'three'
+import { passesFloorGate, personFloorWorld, sampleWorldXYZ, Z_THR, PoseSmoother, proxyCapsuleTransforms, POSE_IDX, type ShadowCamera, type CapsuleXf } from './shadowGeom'
 
 // камера у балконной двери смотрит на восток (как плейт гостиной)
 const CAM: ShadowCamera = {
@@ -119,5 +120,100 @@ describe('PoseSmoother (§5 exp-smooth + z-damp)', () => {
     const out = s.push(B, 0.016)
     expect(out[0][0]).toBeCloseTo(10, 3)
     expect(out[0][2]).toBeCloseTo(10, 3)
+  })
+})
+
+// синтетическая поза: задаём только нужные суставы, остальные [0,0,0,0].
+function blankPose(): number[][] {
+  return Array.from({ length: 33 }, () => [0, 0, 0, 0])
+}
+function withJoints(setter: (p: number[][]) => void): number[][] {
+  const p = blankPose()
+  setter(p)
+  return p
+}
+
+describe('POSE_IDX (MediaPipe Pose 33-landmark константы)', () => {
+  it('канонические индексы суставов', () => {
+    expect(POSE_IDX.L_SHOULDER).toBe(11)
+    expect(POSE_IDX.R_SHOULDER).toBe(12)
+    expect(POSE_IDX.L_ELBOW).toBe(13)
+    expect(POSE_IDX.L_WRIST).toBe(15)
+    expect(POSE_IDX.R_WRIST).toBe(16)
+    expect(POSE_IDX.L_HIP).toBe(23)
+    expect(POSE_IDX.R_HIP).toBe(24)
+    expect(POSE_IDX.L_KNEE).toBe(25)
+    expect(POSE_IDX.L_ANKLE).toBe(27)
+    expect(POSE_IDX.R_ANKLE).toBe(28)
+    expect(POSE_IDX.NOSE).toBe(0)
+  })
+})
+
+describe('proxyCapsuleTransforms (§4.2 ориентация из landmarks)', () => {
+  it('левое предплечье вдоль +Y → кватернион ~identity (ось капсулы Y совпала с сегментом)', () => {
+    const p = withJoints((p) => {
+      p[POSE_IDX.L_ELBOW] = [0, 0, 0, 1]
+      p[POSE_IDX.L_WRIST] = [0, 1, 0, 1]
+    })
+    const xfs: CapsuleXf[] = proxyCapsuleTransforms(p)
+    const fa = xfs.find((x) => x.name === 'forearm_L')!
+    expect(fa).toBeDefined()
+    expect(fa.center[0]).toBeCloseTo(0, 5)
+    expect(fa.center[1]).toBeCloseTo(0.5, 5)
+    expect(fa.length).toBeCloseTo(1, 5)
+    const q = new THREE.Quaternion(fa.quat[0], fa.quat[1], fa.quat[2], fa.quat[3])
+    const yAxis = new THREE.Vector3(0, 1, 0).applyQuaternion(q)
+    expect(yAxis.x).toBeCloseTo(0, 5)
+    expect(yAxis.y).toBeCloseTo(1, 5)
+    expect(yAxis.z).toBeCloseTo(0, 5)
+  })
+
+  it('поднятая рука → кватернион плеча меняется (артикуляция, §10 live-критерий)', () => {
+    const down = withJoints((p) => {
+      p[POSE_IDX.L_SHOULDER] = [0, 0, 0, 1]
+      p[POSE_IDX.L_ELBOW] = [0, -1, 0, 1]
+    })
+    const up = withJoints((p) => {
+      p[POSE_IDX.L_SHOULDER] = [0, 0, 0, 1]
+      p[POSE_IDX.L_ELBOW] = [0, 1, 0, 1]
+    })
+    const qDown = proxyCapsuleTransforms(down).find((x) => x.name === 'upperarm_L')!.quat
+    const qUp = proxyCapsuleTransforms(up).find((x) => x.name === 'upperarm_L')!.quat
+    const dot = Math.abs(qDown[0] * qUp[0] + qDown[1] * qUp[1] + qDown[2] * qUp[2] + qDown[3] * qUp[3])
+    expect(dot).toBeLessThan(0.99)
+  })
+
+  it('ориентация торса берётся из landmarks (наклон вперёд → z-компонента), НЕ force-face-camera', () => {
+    // плечи смещены по +z относительно бёдер → торс-сегмент несёт z (наклон вперёд).
+    // (yaw одной капсулой-торсом не представить — сегмент вертикали инвариантен к yaw;
+    //  проверяем, что ориентация сегмента честно идёт из landmarks, а не обнулена фронтально.)
+    const leaned = withJoints((p) => {
+      p[POSE_IDX.L_SHOULDER] = [0.2, 0, 0.15, 1]
+      p[POSE_IDX.R_SHOULDER] = [-0.2, 0, 0.15, 1]
+      p[POSE_IDX.L_HIP] = [0.1, -1, 0, 1]
+      p[POSE_IDX.R_HIP] = [-0.1, -1, 0, 1]
+    })
+    const torso = proxyCapsuleTransforms(leaned).find((x) => x.name === 'torso')!
+    const q = new THREE.Quaternion(torso.quat[0], torso.quat[1], torso.quat[2], torso.quat[3])
+    const axis = new THREE.Vector3(0, 1, 0).applyQuaternion(q)
+    expect(Math.abs(axis.z)).toBeGreaterThan(0.001)
+  })
+
+  it('сегмент с низкой visibility (joint не виден) пропускается', () => {
+    const p = withJoints((p) => {
+      p[POSE_IDX.L_ELBOW] = [0, 0, 0, 0.1]
+      p[POSE_IDX.L_WRIST] = [0, 1, 0, 0.1]
+    })
+    const xfs = proxyCapsuleTransforms(p)
+    expect(xfs.find((x) => x.name === 'forearm_L')).toBeUndefined()
+  })
+
+  it('голова — сфера (length≈0) у nose', () => {
+    const p = withJoints((p) => {
+      p[POSE_IDX.NOSE] = [0, 1.7, 0, 1]
+    })
+    const head = proxyCapsuleTransforms(p).find((x) => x.name === 'head')!
+    expect(head).toBeDefined()
+    expect(head.center[1]).toBeCloseTo(1.7, 5)
   })
 })

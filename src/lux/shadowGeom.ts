@@ -2,6 +2,8 @@
 // → позиция ног посетителя на полу и его рост в мировых координатах комнаты
 // (Blender-мир). Чистая геометрия — без three.js и рендера.
 
+import * as THREE from 'three'
+
 export type Vec3 = [number, number, number]
 
 export interface ShadowCamera {
@@ -91,4 +93,88 @@ export class PoseSmoother {
     this.prev = out.map((lm) => [lm[0], lm[1], lm[2], lm[3]])
     return out
   }
+}
+
+// Индексы MediaPipe Pose (33 landmark'а). Только используемые ProxyRig (§4.2).
+export const POSE_IDX = {
+  NOSE: 0,
+  L_SHOULDER: 11, R_SHOULDER: 12,
+  L_ELBOW: 13, R_ELBOW: 14,
+  L_WRIST: 15, R_WRIST: 16,
+  L_HIP: 23, R_HIP: 24,
+  L_KNEE: 25, R_KNEE: 26,
+  L_ANKLE: 27, R_ANKLE: 28,
+} as const
+
+// Трансформ одной капсулы (или сферы головы): центр сегмента, кватернион
+// (ось капсулы +Y → вектор сустав→сустав), длина сегмента. Радиусы — у ProxyRig.
+export interface CapsuleXf {
+  name: string
+  center: Vec3
+  quat: [number, number, number, number] // x,y,z,w
+  length: number
+}
+
+const VIS_MIN = 0.5 // joint видим (зеркально POSE_VIS_THRESH в capture)
+const SEGMENTS: [string, number, number][] = [
+  ['upperarm_L', POSE_IDX.L_SHOULDER, POSE_IDX.L_ELBOW],
+  ['forearm_L', POSE_IDX.L_ELBOW, POSE_IDX.L_WRIST],
+  ['upperarm_R', POSE_IDX.R_SHOULDER, POSE_IDX.R_ELBOW],
+  ['forearm_R', POSE_IDX.R_ELBOW, POSE_IDX.R_WRIST],
+  ['thigh_L', POSE_IDX.L_HIP, POSE_IDX.L_KNEE],
+  ['shin_L', POSE_IDX.L_KNEE, POSE_IDX.L_ANKLE],
+  ['thigh_R', POSE_IDX.R_HIP, POSE_IDX.R_KNEE],
+  ['shin_R', POSE_IDX.R_KNEE, POSE_IDX.R_ANKLE],
+]
+
+const _yAxis = new THREE.Vector3(0, 1, 0)
+const _a = new THREE.Vector3()
+const _b = new THREE.Vector3()
+const _dir = new THREE.Vector3()
+const _q = new THREE.Quaternion()
+
+function visible(lm: number[] | undefined): boolean {
+  return !!lm && (lm[3] ?? 0) >= VIS_MIN
+}
+
+function segmentXf(name: string, a: number[], b: number[]): CapsuleXf {
+  _a.set(a[0], a[1], a[2])
+  _b.set(b[0], b[1], b[2])
+  _dir.subVectors(_b, _a)
+  const length = _dir.length()
+  if (length > 1e-6) _q.setFromUnitVectors(_yAxis, _dir.clone().normalize())
+  else _q.identity()
+  return {
+    name,
+    center: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2],
+    quat: [_q.x, _q.y, _q.z, _q.w],
+    length,
+  }
+}
+
+// Чистая математика: 33 world-landmark'а → трансформы капсул (центр/кватернион/длина).
+// Ориентация — из самих landmarks (никакого force-face-camera, §4.2). Невидимые
+// суставы пропускаются. Корень/скейл (F,H) применяет ProxyRig поверх (C.5).
+export function proxyCapsuleTransforms(poseWorld: number[][]): CapsuleXf[] {
+  const out: CapsuleXf[] = []
+
+  const ls = poseWorld[POSE_IDX.L_SHOULDER], rs = poseWorld[POSE_IDX.R_SHOULDER]
+  const lh = poseWorld[POSE_IDX.L_HIP], rh = poseWorld[POSE_IDX.R_HIP]
+  if (visible(ls) && visible(rs) && visible(lh) && visible(rh)) {
+    const shoulderMid = [(ls[0] + rs[0]) / 2, (ls[1] + rs[1]) / 2, (ls[2] + rs[2]) / 2]
+    const hipMid = [(lh[0] + rh[0]) / 2, (lh[1] + rh[1]) / 2, (lh[2] + rh[2]) / 2]
+    out.push(segmentXf('torso', hipMid, shoulderMid))
+  }
+
+  for (const [name, ai, bi] of SEGMENTS) {
+    const a = poseWorld[ai], b = poseWorld[bi]
+    if (visible(a) && visible(b)) out.push(segmentXf(name, a, b))
+  }
+
+  const nose = poseWorld[POSE_IDX.NOSE]
+  if (visible(nose)) {
+    out.push({ name: 'head', center: [nose[0], nose[1], nose[2]], quat: [0, 0, 0, 1], length: 0 })
+  }
+
+  return out
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { personFloorWorld, sampleWorldXYZ, type ShadowCamera } from './shadowGeom'
+import { passesFloorGate, personFloorWorld, sampleWorldXYZ, Z_THR, type ShadowCamera } from './shadowGeom'
 
 // камера у балконной двери смотрит на восток (как плейт гостиной)
 const CAM: ShadowCamera = {
@@ -47,5 +47,29 @@ describe('sampleWorldXYZ', () => {
   })
   it('клампит u/v за пределами [0,1] в крайние тексели', () => {
     expect(sampleWorldXYZ(wp, -5, 5)).toEqual([0, 1, 7])
+  })
+})
+
+describe('passesFloorGate (F sanity-gate §5)', () => {
+  it('Z_THR = 0.15 (контракт)', () => {
+    expect(Z_THR).toBe(0.15)
+  })
+  it('F.z ровно на полу → принимаем', () => {
+    expect(passesFloorGate([3, 1, 0.0], 0.0)).toBe(true)
+  })
+  it('F.z в пределах порога (|Δ| < 0.15) → принимаем', () => {
+    expect(passesFloorGate([3, 1, 0.1], 0.0)).toBe(true)
+    expect(passesFloorGate([3, 1, -0.1], 0.0)).toBe(true)
+  })
+  it('F.z далеко от floorZ (стена/разрыв, |Δ| > 0.15) → отвергаем → fallback v1', () => {
+    expect(passesFloorGate([3, 1, 1.6], 0.0)).toBe(false)
+    expect(passesFloorGate([3, 1, 0.5], 0.0)).toBe(false)
+  })
+  it('учитывает ненулевой floorZ', () => {
+    expect(passesFloorGate([3, 1, 1.05], 1.0)).toBe(true)  // |1.05-1.0|=0.05 < 0.15
+    expect(passesFloorGate([3, 1, 1.3], 1.0)).toBe(false)  // |1.3-1.0|=0.30 > 0.15
+  })
+  it('нечисловой/NaN сэмпл (битый EXR-пиксель) → отвергаем', () => {
+    expect(passesFloorGate([3, 1, NaN], 0.0)).toBe(false)
   })
 })

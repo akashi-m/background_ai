@@ -36,6 +36,16 @@ export function sampleWorldXYZ(
   return [wp.data[i], wp.data[i + 1], wp.data[i + 2]]
 }
 
+// F sanity-gate (спека §5): если ступни попали на дальнюю стену / разрыв EXR,
+// |F.z - floorZ| вылетит за порог → отвергаем F и падаем на fallback v1 этот кадр.
+// Без гейта монокулярный шум даёт дёрганые телепорты тени на метры.
+export const Z_THR = 0.15
+
+export function passesFloorGate(F: Vec3, floorZ: number): boolean {
+  if (!isFinite(F[2])) return false
+  return Math.abs(F[2] - floorZ) <= Z_THR
+}
+
 export function personFloorWorld(t: PersonTelemetry, cam: ShadowCamera, floorZ: number): PersonOnFloor {
   const fwd = norm(sub(cam.target, cam.pos))
   // правый вектор (горизонталь): fwd × up(0,0,1)

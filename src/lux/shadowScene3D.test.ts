@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import * as THREE from 'three'
-import { boxReceiver, bakedShadowCamera, staticProxy, keyPointLights, ShadowScene3D } from './shadowScene3D'
+import { boxReceiver, bakedShadowCamera, staticProxy, keyPointLights, ShadowScene3D, ProxyRig } from './shadowScene3D'
 import type { ShadowCamera } from './shadowGeom'
+import { POSE_IDX } from './shadowGeom'
 
 describe('boxReceiver', () => {
   it('возвращает пол + по мешу на каждый box', () => {
@@ -236,5 +237,71 @@ describe('ShadowScene3D (B1 сборка)', () => {
   it('update не бросает в B1 (статический прокси; pose-drive — Фаза C)', () => {
     const s = new ShadowScene3D(shadowData, fakeRenderer)
     expect(() => s.update(null, { F: new THREE.Vector3(0, 0, 0), H: 1.7 }, shadowData)).not.toThrow()
+  })
+})
+
+// синтетическая поза в метрах (hip-origin): прямая стойка.
+function standingPose(): number[][] {
+  const p = Array.from({ length: 33 }, () => [0, 0, 0, 0])
+  p[POSE_IDX.L_SHOULDER] = [-0.2, 0.5, 0, 1]
+  p[POSE_IDX.R_SHOULDER] = [0.2, 0.5, 0, 1]
+  p[POSE_IDX.L_HIP] = [-0.1, 0, 0, 1]
+  p[POSE_IDX.R_HIP] = [0.1, 0, 0, 1]
+  p[POSE_IDX.L_ELBOW] = [-0.25, 0.2, 0, 1]
+  p[POSE_IDX.L_WRIST] = [-0.3, -0.1, 0, 1]
+  p[POSE_IDX.L_KNEE] = [-0.1, -0.5, 0, 1]
+  p[POSE_IDX.L_ANKLE] = [-0.1, -0.9, 0, 1]
+  p[POSE_IDX.NOSE] = [0, 0.75, 0, 1]
+  return p
+}
+
+describe('ProxyRig.update (§4.2 привод от позы)', () => {
+  it('корень группы транслируется в F', () => {
+    const rig = new ProxyRig()
+    rig.update(standingPose(), new THREE.Vector3(3, 1.5, 0), 1.7)
+    expect(rig.object.position.x).toBeCloseTo(3, 5)
+    expect(rig.object.position.y).toBeCloseTo(1.5, 5)
+    expect(rig.object.position.z).toBeCloseTo(0, 5)
+  })
+  it('группа масштабируется к росту H (uniform scale > 0)', () => {
+    const rig = new ProxyRig()
+    rig.update(standingPose(), new THREE.Vector3(0, 0, 0), 1.7)
+    expect(rig.object.scale.x).toBeGreaterThan(0)
+    expect(rig.object.scale.x).toEqual(rig.object.scale.y)
+    expect(rig.object.scale.y).toEqual(rig.object.scale.z)
+  })
+  it('бОльший H → бОльший скейл', () => {
+    const small = new ProxyRig(); small.update(standingPose(), new THREE.Vector3(0, 0, 0), 1.4)
+    const big = new ProxyRig(); big.update(standingPose(), new THREE.Vector3(0, 0, 0), 2.0)
+    expect(big.object.scale.y).toBeGreaterThan(small.object.scale.y)
+  })
+  it('видимые капсулы активны (visible && castShadow), невидимые-суставы спрятаны', () => {
+    const rig = new ProxyRig()
+    rig.update(standingPose(), new THREE.Vector3(0, 0, 0), 1.7)
+    let active = 0
+    rig.object.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && m.visible && m.castShadow) active++ })
+    expect(active).toBeGreaterThan(0)
+  })
+  it('пул переиспользуется (число мешей не растёт между кадрами)', () => {
+    const rig = new ProxyRig()
+    rig.update(standingPose(), new THREE.Vector3(0, 0, 0), 1.7)
+    let c1 = 0; rig.object.traverse((o) => { if ((o as THREE.Mesh).isMesh) c1++ })
+    const raised = standingPose(); raised[POSE_IDX.L_WRIST] = [-0.3, 0.9, 0, 1]
+    rig.update(raised, new THREE.Vector3(0, 0, 0), 1.7)
+    let c2 = 0; rig.object.traverse((o) => { if ((o as THREE.Mesh).isMesh) c2++ })
+    expect(c2).toBe(c1)
+  })
+  it('невидимый каст: colorWrite=false, depthWrite=false, mesh.visible=true, castShadow=true', () => {
+    const rig = new ProxyRig()
+    rig.update(standingPose(), new THREE.Vector3(0, 0, 0), 1.7)
+    rig.object.traverse((o) => {
+      const m = o as THREE.Mesh
+      if (m.isMesh && m.visible) {
+        const mat = m.material as THREE.Material
+        expect(mat.colorWrite).toBe(false)
+        expect(mat.depthWrite).toBe(false)
+        expect(m.castShadow).toBe(true)
+      }
+    })
   })
 })

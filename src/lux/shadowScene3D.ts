@@ -4,6 +4,7 @@
 // Базис: Blender Z-up во всей сцене (камера up=(0,0,1)); без координатного свопа.
 import * as THREE from 'three'
 import type { ShadowCamera } from './shadowGeom'
+import { proxyCapsuleTransforms } from './shadowGeom'
 
 // Box задаётся axis-aligned min/max в Blender Z-up мировых координатах.
 export interface ReceiverBox { min: [number, number, number]; max: [number, number, number] }
@@ -60,6 +61,80 @@ export function staticProxy(F: [number, number, number], H: number): THREE.Group
 
   group.position.set(F[0], F[1], F[2]) // RAW Blender Z-up, без свопа
   return group
+}
+
+// Per-segment радиусы капсул (метры, pose-метрика; масштабируются вместе с _root).
+const PROXY_RADII: Record<string, number> = {
+  torso: 0.12,
+  upperarm_L: 0.05, upperarm_R: 0.05, forearm_L: 0.045, forearm_R: 0.045,
+  thigh_L: 0.08, thigh_R: 0.08, shin_L: 0.06, shin_R: 0.06,
+}
+const HEAD_RADIUS = 0.11
+
+// Невидимый капсульный прокси, управляемый позой (§4.2). Пул мешей по сегментам,
+// переиспользуется каждый кадр. Невидим в цвет/глубину (colorWrite/depthWrite=false),
+// но castShadow=true + visible=true → попадает в shadow-pass (r180: visible=false выкинул бы).
+export class ProxyRig {
+  private _root = new THREE.Group()
+  private _capsules = new Map<string, THREE.Mesh>()
+  private _mat: THREE.MeshBasicMaterial
+  private _q = new THREE.Quaternion()
+
+  constructor() {
+    this._mat = new THREE.MeshBasicMaterial()
+    this._mat.colorWrite = false
+    this._mat.depthWrite = false
+    for (const [name, radius] of Object.entries(PROXY_RADII)) {
+      // CapsuleGeometry ось = Y, цилиндр высотой 1 → масштаб Y до длины сегмента в update.
+      const mesh = new THREE.Mesh(new THREE.CapsuleGeometry(radius, 1, 4, 8), this._mat)
+      mesh.castShadow = true
+      mesh.receiveShadow = false
+      mesh.visible = false
+      this._capsules.set(name, mesh)
+      this._root.add(mesh)
+    }
+    const head = new THREE.Mesh(new THREE.SphereGeometry(HEAD_RADIUS, 12, 12), this._mat)
+    head.castShadow = true
+    head.receiveShadow = false
+    head.visible = false
+    this._capsules.set('head', head)
+    this._root.add(head)
+  }
+
+  get object(): THREE.Group { return this._root }
+
+  // Привод прокси от живой позы. Корень → F, uniform-скейл к росту H, капсулы — из
+  // proxyCapsuleTransforms (ориентация из landmarks). Пул переиспользуется.
+  update(poseWorld: number[][], F: THREE.Vector3, H: number): void {
+    this._root.position.copy(F)
+    const poseH = this._poseHeight(poseWorld)
+    const s = poseH > 1e-3 ? H / poseH : 1
+    this._root.scale.setScalar(s)
+
+    const xfs = proxyCapsuleTransforms(poseWorld)
+    const used = new Set<string>()
+    for (const xf of xfs) {
+      const mesh = this._capsules.get(xf.name)
+      if (!mesh) continue
+      mesh.position.set(xf.center[0], xf.center[1], xf.center[2])
+      this._q.set(xf.quat[0], xf.quat[1], xf.quat[2], xf.quat[3])
+      mesh.quaternion.copy(this._q)
+      if (xf.name !== 'head') mesh.scale.set(1, Math.max(1e-3, xf.length), 1)
+      mesh.visible = true
+      used.add(xf.name)
+    }
+    for (const [name, mesh] of this._capsules) {
+      if (!used.has(name)) mesh.visible = false
+    }
+  }
+
+  // высота позы (hip-origin метры): размах Y видимых суставов (ankle↔nose).
+  private _poseHeight(p: number[][]): number {
+    const ys: number[] = []
+    for (let i = 0; i < p.length; i++) if ((p[i][3] ?? 0) >= 0.5) ys.push(p[i][1])
+    if (ys.length < 2) return 0
+    return Math.max(...ys) - Math.min(...ys)
+  }
 }
 
 export interface Lamp { pos: [number, number, number]; weight: number }

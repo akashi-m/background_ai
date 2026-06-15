@@ -17,7 +17,7 @@ import { LuxCompositor, type HarmonizeToggles } from './lux/compositor'
 import { IdleSlides } from './lux/idle'
 import { loadLutTexture } from './lux/lut'
 import { shadowFromBbox, SmoothedShadow } from './lux/shadow'
-import { personFloorWorld } from './lux/shadowGeom'
+import { personFloorWorld, sampleWorldXYZ } from './lux/shadowGeom'
 import { parseDevFlags } from './lux/devFlags'
 import { LuxUI, interiorLabels } from './lux/ui'
 
@@ -27,16 +27,6 @@ async function fetchJson(url: string): Promise<unknown> {
   return res.json()
 }
 
-// Мировая XYZ-точка пикселя плейта (u,v в [0..1], v вверх). Данные EXR row0=верх.
-function sampleWorldXYZ(
-  wp: { data: Float32Array; width: number; height: number }, u: number, v: number,
-): [number, number, number] {
-  // как шейдер: texture(tWorld, (u,v)) с flipY=false → data row = v*(h-1)
-  const px = Math.min(wp.width - 1, Math.max(0, Math.round(u * (wp.width - 1))))
-  const py = Math.min(wp.height - 1, Math.max(0, Math.round(v * (wp.height - 1))))
-  const i = (py * wp.width + px) * 4
-  return [wp.data[i], wp.data[i + 1], wp.data[i + 2]]
-}
 
 async function start() {
   const flags = parseDevFlags(location.search)

@@ -25,6 +25,17 @@ function norm(a: Vec3): Vec3 {
   return [a[0] / l, a[1] / l, a[2] / l]
 }
 
+// Перенесено из main.ts: сэмпл мировой позиции из worldPos-EXR (CPU).
+// Как шейдер: texture(tWorld, (u,v)) с flipY=false → row = v*(h-1).
+export function sampleWorldXYZ(
+  wp: { data: Float32Array; width: number; height: number }, u: number, v: number,
+): Vec3 {
+  const px = Math.min(wp.width - 1, Math.max(0, Math.round(u * (wp.width - 1))))
+  const py = Math.min(wp.height - 1, Math.max(0, Math.round(v * (wp.height - 1))))
+  const i = (py * wp.width + px) * 4
+  return [wp.data[i], wp.data[i + 1], wp.data[i + 2]]
+}
+
 export function personFloorWorld(t: PersonTelemetry, cam: ShadowCamera, floorZ: number): PersonOnFloor {
   const fwd = norm(sub(cam.target, cam.pos))
   // правый вектор (горизонталь): fwd × up(0,0,1)

@@ -613,10 +613,10 @@ export class LuxCompositor {
       if (opts.feetUV) {
         const b = this.blobMat.uniforms
         b.tBg.value = this.compositeRT.texture
-        b.uCenter.value.set((opts.feetUV.u - 0.5) / sx + 0.5, (opts.feetUV.v - 0.5) / sy + 0.5)
-        const rx = (opts.feetUV.halfW / sx) * 1.5
-        b.uRadius.value.set(rx, rx * 0.4)
-        b.uOpacity.value = 0.5 * opts.mirrorOpacity
+        b.uCenter.value.set((opts.feetUV.u - 0.5) / sx + 0.5, (opts.feetUV.v - 0.5) / sy + 0.5 + 0.06)
+        const rx = (opts.feetUV.halfW / sx) * 1.0
+        b.uRadius.value.set(rx, rx * 0.3)
+        b.uOpacity.value = 0.3 * opts.mirrorOpacity
         this.pass(this.blobMat, this.shadowRT)
         this.blitMat.uniforms.tSrc.value = this.shadowRT.texture
         this.pass(this.blitMat, this.compositeRT)

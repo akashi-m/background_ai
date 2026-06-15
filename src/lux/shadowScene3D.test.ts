@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import * as THREE from 'three'
-import { boxReceiver, bakedShadowCamera } from './shadowScene3D'
+import { boxReceiver, bakedShadowCamera, staticProxy } from './shadowScene3D'
 import type { ShadowCamera } from './shadowGeom'
 
 describe('boxReceiver', () => {
@@ -83,5 +83,47 @@ describe('bakedShadowCamera', () => {
       new THREE.Matrix4().extractRotation(c.matrixWorld),
     ).normalize()
     expect(fwd.dot(wantDir)).toBeCloseTo(1, 4)
+  })
+})
+
+describe('staticProxy (B1 invisible caster)', () => {
+  it('кастер: castShadow=true, visible=true (visible=false выкинул бы из shadow-pass)', () => {
+    const g = staticProxy([0, 0, 0], 1.7)
+    let meshes = 0
+    g.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh) {
+        meshes++
+        expect((o as THREE.Mesh).castShadow).toBe(true)
+        expect(o.visible).toBe(true)
+      }
+    })
+    expect(meshes).toBeGreaterThan(0)
+  })
+
+  it('невидимый каст: материал colorWrite=false, depthWrite=false', () => {
+    const g = staticProxy([0, 0, 0], 1.7)
+    g.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.Material | undefined
+      if (m) {
+        expect(m.colorWrite).toBe(false)
+        expect(m.depthWrite).toBe(false)
+      }
+    })
+  })
+
+  it('корень группы стоит в RAW F (Blender Z-up, без свопа)', () => {
+    const g = staticProxy([1, 2, 0.5], 1.7)
+    expect(g.position.x).toBeCloseTo(1, 6)
+    expect(g.position.y).toBeCloseTo(2, 6)
+    expect(g.position.z).toBeCloseTo(0.5, 6)
+  })
+
+  it('высота прокси вдоль +Z: верх ≈ F.z + H, основание ≈ F.z', () => {
+    const g = staticProxy([0, 0, 0], 1.8)
+    g.updateMatrixWorld(true)
+    const bbox = new THREE.Box3().setFromObject(g)
+    expect(bbox.max.z).toBeGreaterThan(1.4)
+    expect(bbox.max.z).toBeLessThanOrEqual(1.8 + 1e-3)
+    expect(bbox.min.z).toBeCloseTo(0, 2)
   })
 })

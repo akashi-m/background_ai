@@ -35,6 +35,33 @@ export function boxReceiver(floorZ: number, boxes: ReceiverBox[]): THREE.Mesh[] 
   return meshes
 }
 
+// Статический тест-кастер B1: невидимый «столбик» (капсула) высотой H в точке F.
+// Не pose-driven (полноценный ProxyRig — Phase C). Нужен для alignment-проверки
+// (тень совпадает с плейтом). Невидимость каста: colorWrite=false, depthWrite=false,
+// visible=true (r180: visible=false выкинул бы из shadow-pass — spec §4.2). castShadow=true.
+// Базис Z-up: прокси стоит вдоль +Z; корень в RAW F (без свопа).
+export function staticProxy(F: [number, number, number], H: number): THREE.Group {
+  const group = new THREE.Group()
+  const mat = new THREE.MeshBasicMaterial()
+  mat.colorWrite = false
+  mat.depthWrite = false
+
+  const radius = 0.12
+  const cylLen = Math.max(0.01, H - 2 * radius)
+  const capsule = new THREE.Mesh(new THREE.CapsuleGeometry(radius, cylLen, 4, 8), mat)
+  capsule.castShadow = true
+  capsule.receiveShadow = false
+  capsule.visible = true
+  // CapsuleGeometry ось = локальный Y; в Z-up столбик должен идти вдоль +Z → rotateX(+90°).
+  capsule.rotation.x = Math.PI / 2
+  // центр капсулы на половине высоты над основанием группы (вдоль +Z)
+  capsule.position.set(0, 0, H / 2)
+  group.add(capsule)
+
+  group.position.set(F[0], F[1], F[2]) // RAW Blender Z-up, без свопа
+  return group
+}
+
 // Запечённая камера тени = ровно Blender-камера плейта (lights.json.camera).
 // Базис: Blender Z-up во всей сцене → camera.up=(0,0,1), БЕЗ свопа координат
 // (приёмник boxReceiver/EXR-mesh тоже в Z-up). matrixAutoUpdate=false: мировую

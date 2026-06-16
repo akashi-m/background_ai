@@ -103,15 +103,30 @@ export class ProxyRig {
 
   get object(): THREE.Group { return this._root }
 
-  // Привод прокси от живой позы. Корень → F, uniform-скейл к росту H, капсулы — из
-  // proxyCapsuleTransforms (ориентация из landmarks). Пул переиспользуется.
+  // Привод прокси от живой позы (§4.2 + ремап осей). MediaPipe world: x-вправо, y-ВНИЗ,
+  // z-к камере (hip-origin). Сцена Z-up, root=F (ступни на полу). Ремап в Z-up: [x, z, -y]
+  // — вертикаль pose(−Y) → scene +Z (голова вверх); затем якорь ступней на 0 + скейл к росту H.
   update(poseWorld: number[][], F: THREE.Vector3, H: number): void {
+    // 1) ремап осей в Z-up + сбор вертикального экстента видимых суставов
+    const mapped: number[][] = poseWorld.map((lm) =>
+      lm && lm.length >= 4 ? [lm[0], lm[2], -lm[1], lm[3]] : [0, 0, 0, 0])
+    let minZ = Infinity
+    let maxZ = -Infinity
+    for (const lm of mapped) {
+      if ((lm[3] ?? 0) < 0.5) continue
+      if (lm[2] < minZ) minZ = lm[2]
+      if (lm[2] > maxZ) maxZ = lm[2]
+    }
+    const hasVis = isFinite(minZ)
+    // 2) якорь: нижняя точка (ступни) → 0 (на уровень root=F)
+    if (hasVis) for (const lm of mapped) lm[2] -= minZ
+    // 3) скейл к росту H по вертикальному размаху позы
+    const height = hasVis ? maxZ - minZ : 0
+    const s = height > 1e-3 ? H / height : 1
     this._root.position.copy(F)
-    const poseH = this._poseHeight(poseWorld)
-    const s = poseH > 1e-3 ? H / poseH : 1
     this._root.scale.setScalar(s)
 
-    const xfs = proxyCapsuleTransforms(poseWorld)
+    const xfs = proxyCapsuleTransforms(mapped)
     const used = new Set<string>()
     for (const xf of xfs) {
       const mesh = this._capsules.get(xf.name)
@@ -126,14 +141,6 @@ export class ProxyRig {
     for (const [name, mesh] of this._capsules) {
       if (!used.has(name)) mesh.visible = false
     }
-  }
-
-  // высота позы (hip-origin метры): размах Y видимых суставов (ankle↔nose).
-  private _poseHeight(p: number[][]): number {
-    const ys: number[] = []
-    for (let i = 0; i < p.length; i++) if ((p[i][3] ?? 0) >= 0.5) ys.push(p[i][1])
-    if (ys.length < 2) return 0
-    return Math.max(...ys) - Math.min(...ys)
   }
 }
 

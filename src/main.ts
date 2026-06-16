@@ -221,6 +221,7 @@ async function start() {
         worldPos: active.shadowData.worldPos,
         floorZ: active.shadowData.floorZ,
         camera: active.shadowData.camera,
+        bakedShadow: active.shadowData.bakedShadow ?? null,
       } : null,
       personFloor,
       pose: (() => {

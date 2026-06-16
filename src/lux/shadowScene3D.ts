@@ -67,9 +67,9 @@ export function staticProxy(F: [number, number, number], H: number): THREE.Group
 const PROXY_RADII: Record<string, number> = {
   torso: 0.12,
   upperarm_L: 0.05, upperarm_R: 0.05, forearm_L: 0.045, forearm_R: 0.045,
-  thigh_L: 0.08, thigh_R: 0.08, shin_L: 0.06, shin_R: 0.06,
+  leg: 0.13, // единая центральная нога (hipMid→ankleMid) вместо двух — без «/\»-базы
+  neck: 0.07, // короткий пенёк над плечами; головы нет (юзер: убрать всё выше шеи)
 }
-const HEAD_RADIUS = 0.11
 
 // Невидимый капсульный прокси, управляемый позой (§4.2). Пул мешей по сегментам,
 // переиспользуется каждый кадр. Невидим в цвет/глубину (colorWrite/depthWrite=false),
@@ -79,6 +79,7 @@ export class ProxyRig {
   private _capsules = new Map<string, THREE.Mesh>()
   private _mat: THREE.MeshBasicMaterial
   private _q = new THREE.Quaternion()
+  private _contact: THREE.Mesh // плоский диск-лужа у ступней (всегда видим)
 
   constructor() {
     this._mat = new THREE.MeshBasicMaterial()
@@ -93,23 +94,27 @@ export class ProxyRig {
       this._capsules.set(name, mesh)
       this._root.add(mesh)
     }
-    const head = new THREE.Mesh(new THREE.SphereGeometry(HEAD_RADIUS, 12, 12), this._mat)
-    head.castShadow = true
-    head.receiveShadow = false
-    head.visible = false
-    this._capsules.set('head', head)
-    this._root.add(head)
+    // Контактная лужа: плоский широкий эллипсоид у ступней → низ тени = мягкий полукруг,
+    // плавно сливается с блобом (юзер). НЕ в _capsules → hide-loop позы её не трогает.
+    this._contact = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 8), this._mat)
+    this._contact.castShadow = true
+    this._contact.receiveShadow = false
+    this._contact.scale.set(0.22, 0.22, 0.05) // широкий, плоский
+    this._contact.position.set(0, 0, 0.05)
+    this._root.add(this._contact)
   }
 
   get object(): THREE.Group { return this._root }
 
   // Привод прокси от живой позы (§4.2 + ремап осей). MediaPipe world: x-вправо, y-ВНИЗ,
-  // z-к камере (hip-origin). Сцена Z-up, root=F (ступни на полу). Ремап в Z-up: [x, z, -y]
-  // — вертикаль pose(−Y) → scene +Z (голова вверх); затем якорь ступней на 0 + скейл к росту H.
+  // z-к камере (hip-origin). Камера сцены смотрит вдоль +X → scene-X = ГЛУБИНА, scene-Y =
+  // горизонталь экрана. Поэтому глубина позы (mp_z) → scene-X, лево-право (mp_x) → scene-Y,
+  // вертикаль (−mp_y) → scene-Z. Ремап [z, x, -y]: человек боком даёт узкий профиль (а не
+  // фронтальный широкий силуэт). Затем якорь ступней на 0 + скейл к росту H.
   update(poseWorld: number[][], F: THREE.Vector3, H: number): void {
     // 1) ремап осей в Z-up + сбор вертикального экстента видимых суставов
     const mapped: number[][] = poseWorld.map((lm) =>
-      lm && lm.length >= 4 ? [lm[0], lm[2], -lm[1], lm[3]] : [0, 0, 0, 0])
+      lm && lm.length >= 4 ? [lm[2], lm[0], -lm[1], lm[3]] : [0, 0, 0, 0])
     let minZ = Infinity
     let maxZ = -Infinity
     for (const lm of mapped) {
@@ -124,8 +129,10 @@ export class ProxyRig {
     const height = hasVis ? maxZ - minZ : 0
     const s = height > 1e-3 ? H / height : 1
     this._root.position.copy(F)
-    // высота тени = 0.8·рост (foreshortened пол-тень), ширина пропорциональна росту
-    this._root.scale.set(s, s, s * 0.8)
+    // общий множитель размера тени (юзер: −10%, −10%, затем +10% → 0.81·1.1 ≈ 0.89);
+    // высота = 0.8·(ширина) сохраняется. (z/y = 0.8 инвариантно к k — тест C.5 держится.)
+    const k = 0.89
+    this._root.scale.set(s * k, s * k, s * 0.8 * k)
 
     const xfs = proxyCapsuleTransforms(mapped)
     const used = new Set<string>()
@@ -135,7 +142,7 @@ export class ProxyRig {
       mesh.position.set(xf.center[0], xf.center[1], xf.center[2])
       this._q.set(xf.quat[0], xf.quat[1], xf.quat[2], xf.quat[3])
       mesh.quaternion.copy(this._q)
-      if (xf.name !== 'head') mesh.scale.set(1, Math.max(1e-3, xf.length), 1)
+      mesh.scale.set(1, Math.max(1e-3, xf.length), 1) // все сегменты — капсулы (головы нет)
       mesh.visible = true
       used.add(xf.name)
     }

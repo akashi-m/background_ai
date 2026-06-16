@@ -131,15 +131,13 @@ export interface CapsuleXf {
 }
 
 const VIS_MIN = 0.5 // joint видим (зеркально POSE_VIS_THRESH в capture)
+// Только руки. Ноги НЕ две отдельные капсулы (давали «/\»-базу у двух стоп — юзер
+// убрал), а единая центральная масса hipMid→ankleMid (строится ниже как 'leg').
 const SEGMENTS: [string, number, number][] = [
   ['upperarm_L', POSE_IDX.L_SHOULDER, POSE_IDX.L_ELBOW],
   ['forearm_L', POSE_IDX.L_ELBOW, POSE_IDX.L_WRIST],
   ['upperarm_R', POSE_IDX.R_SHOULDER, POSE_IDX.R_ELBOW],
   ['forearm_R', POSE_IDX.R_ELBOW, POSE_IDX.R_WRIST],
-  ['thigh_L', POSE_IDX.L_HIP, POSE_IDX.L_KNEE],
-  ['shin_L', POSE_IDX.L_KNEE, POSE_IDX.L_ANKLE],
-  ['thigh_R', POSE_IDX.R_HIP, POSE_IDX.R_KNEE],
-  ['shin_R', POSE_IDX.R_KNEE, POSE_IDX.R_ANKLE],
 ]
 
 const _yAxis = new THREE.Vector3(0, 1, 0)
@@ -175,10 +173,42 @@ export function proxyCapsuleTransforms(poseWorld: number[][]): CapsuleXf[] {
 
   const ls = poseWorld[POSE_IDX.L_SHOULDER], rs = poseWorld[POSE_IDX.R_SHOULDER]
   const lh = poseWorld[POSE_IDX.L_HIP], rh = poseWorld[POSE_IDX.R_HIP]
-  if (visible(ls) && visible(rs) && visible(lh) && visible(rh)) {
-    const shoulderMid = [(ls[0] + rs[0]) / 2, (ls[1] + rs[1]) / 2, (ls[2] + rs[2]) / 2]
-    const hipMid = [(lh[0] + rh[0]) / 2, (lh[1] + rh[1]) / 2, (lh[2] + rh[2]) / 2]
+  const hipsVisible = visible(lh) && visible(rh)
+  const hipMid = hipsVisible
+    ? [(lh[0] + rh[0]) / 2, (lh[1] + rh[1]) / 2, (lh[2] + rh[2]) / 2]
+    : null
+  const shoulderMid = visible(ls) && visible(rs)
+    ? [(ls[0] + rs[0]) / 2, (ls[1] + rs[1]) / 2, (ls[2] + rs[2]) / 2]
+    : null
+  if (shoulderMid && hipMid) {
     out.push(segmentXf('torso', hipMid, shoulderMid))
+  }
+
+  // Шея = короткий пенёк над плечами. Голову (всё выше шеи) убрали — силуэт
+  // заканчивается на шее (юзер). Высота шеи = 40% пути плечи→нос (естественно, без головы).
+  const noseLm = poseWorld[POSE_IDX.NOSE]
+  if (shoulderMid && visible(noseLm)) {
+    const neckTop = [
+      shoulderMid[0] + (noseLm[0] - shoulderMid[0]) * 0.4,
+      shoulderMid[1] + (noseLm[1] - shoulderMid[1]) * 0.4,
+      shoulderMid[2] + (noseLm[2] - shoulderMid[2]) * 0.4,
+    ]
+    out.push(segmentXf('neck', shoulderMid, neckTop))
+  }
+
+  // Единая нога: hipMid → ankleMid (средняя точка видимых лодыжек). Одна центральная
+  // масса вместо двух ног — низ тени НЕ расходится в «/\» (юзер убрал базу у ног).
+  const la = poseWorld[POSE_IDX.L_ANKLE], ra = poseWorld[POSE_IDX.R_ANKLE]
+  if (hipMid) {
+    const ankles = [la, ra].filter(visible)
+    if (ankles.length > 0) {
+      const ankleMid = [
+        ankles.reduce((s, a) => s + a[0], 0) / ankles.length,
+        ankles.reduce((s, a) => s + a[1], 0) / ankles.length,
+        ankles.reduce((s, a) => s + a[2], 0) / ankles.length,
+      ]
+      out.push(segmentXf('leg', ankleMid, hipMid))
+    }
   }
 
   for (const [name, ai, bi] of SEGMENTS) {
@@ -186,10 +216,7 @@ export function proxyCapsuleTransforms(poseWorld: number[][]): CapsuleXf[] {
     if (visible(a) && visible(b)) out.push(segmentXf(name, a, b))
   }
 
-  const nose = poseWorld[POSE_IDX.NOSE]
-  if (visible(nose)) {
-    out.push({ name: 'head', center: [nose[0], nose[1], nose[2]], quat: [0, 0, 0, 1], length: 0 })
-  }
+  // Головы НЕТ (юзер: «убрать всё выше шеи») — силуэт оканчивается шеей-пеньком.
 
   return out
 }

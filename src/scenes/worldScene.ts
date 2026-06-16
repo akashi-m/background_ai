@@ -26,6 +26,8 @@ export interface BuiltWorld {
     worldPos: THREE.Texture
     // те же мировые XYZ на CPU (Float32) — для сэмпла точки пола под ступнями (якорь тени)
     worldPosData: { data: Float32Array; width: number; height: number }
+    // Фаза 1: запечённая Blender-тень (shadow-catcher, альфа = покрытие тенью). Опционально.
+    bakedShadow?: THREE.Texture
   }
 }
 
@@ -121,12 +123,20 @@ export async function buildWorld(
         worldPos.minFilter = THREE.NearestFilter
         worldPos.magFilter = THREE.NearestFilter
         const img = worldPos.image as { data: Float32Array; width: number; height: number }
+        // Фаза 1: запечённая Blender-тень (опц.) — грузим shadow_baked.png, если есть.
+        let bakedShadow: THREE.Texture | undefined
+        try {
+          bakedShadow = await new THREE.TextureLoader().loadAsync(baseUrl + 'shadow_baked.png')
+        } catch {
+          /* бейка нет — ок, тень останется прокси/фолбэк */
+        }
         built.shadowData = {
           lamps,
           camera: lights.camera,
           floorZ: lights.floorZ,
           worldPos,
           worldPosData: { data: img.data, width: img.width, height: img.height },
+          bakedShadow,
         }
       } catch (e) {
         console.warn(`мир «${name}»: shadowData не загружена (${e instanceof Error ? e.message : e}); тень-фолбэк`)

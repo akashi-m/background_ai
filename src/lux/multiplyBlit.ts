@@ -37,10 +37,13 @@ export function makeMultiplyBlitMat(): THREE.ShaderMaterial {
       uUvScale: { value: new THREE.Vector2(1, 1) },
       // (оставлены для совместимости с compositor-проводкой; формула — на uCenterDark/uEdgeDark)
       uShadowFloorK: { value: 0.7 }, uShadowStrength: { value: 0.5 },
-      uCenterDark: { value: 0.5 },  // затемнение ЯДРА (умбра) — V1 «лёгкая» (выбор юзера)
-      uEdgeDark: { value: 0.2 },    // затемнение КРАЯ (полутень) — мягкий выход
+      uCenterDark: { value: 0.36 }, // затемнение ЯДРА (умбра) — ещё +10% прозрачности (юзер)
+      uEdgeDark: { value: 0.072 },  // затемнение КРАЯ (полутень) — ещё +10% прозрачности (юзер)
       uBlur: { value: 0.009 },      // радиус размытия маски тени (UV) — диффузный контур
       uShadowTint: { value: new THREE.Color(0.40, 0.35, 0.28) }, // тёплый тёмный (не чёрный)
+      // смещение маски тени в экранных UV: x>0 вправо, y>0 вверх. (-0.03,+0.05): 3% влево,
+      // подъём к ступням как у блоба (0.06) минус опускание на 1% = 0.05.
+      uShadowOffset: { value: new THREE.Vector2(-0.03, 0.05) },
     },
     vertexShader: MB_VERT,
     fragmentShader: /* glsl */ `
@@ -49,27 +52,60 @@ export function makeMultiplyBlitMat(): THREE.ShaderMaterial {
       uniform sampler2D tBg; uniform sampler2D tShadow;
       uniform vec2 uUvScale; uniform float uShadowFloorK; uniform float uShadowStrength;
       uniform float uCenterDark; uniform float uEdgeDark; uniform float uBlur;
-      uniform vec3 uShadowTint;
+      uniform vec3 uShadowTint; uniform vec2 uShadowOffset;
       float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       void main() {
-        vec2 cuv = (vUv - 0.5) * uUvScale + 0.5;
+        vec2 cuv = (vUv - 0.5) * uUvScale + 0.5;           // фон НЕ двигаем
+        // смещение тени в экранных UV (x вправо, y вверх): сэмпл маски сдвинут противоходом
+        vec2 scuv = cuv - uShadowOffset;
         // размытие маски тени (диффузный контур, без острых краёв): 4×4 box-тап
         float sh = 0.0;
         for (int j = 0; j < 4; j++) {
           for (int i = 0; i < 4; i++) {
             vec2 o = (vec2(float(i), float(j)) - 1.5) * uBlur;
-            sh += texture2D(tShadow, cuv + o).r;
+            sh += texture2D(tShadow, scuv + o).r;
           }
         }
         sh /= 16.0;
         float st = 1.0 - sh;                                // 0 свет .. 1 ядро (размыто)
-        float presence = smoothstep(0.02, 0.35, st);        // мягкий вход (вне тени → 0)
-        float coreness = smoothstep(0.30, 0.85, st);        // ядро (умбра)
-        float dust = mix(0.85, 1.0, hash(floor(cuv * 480.0)));
+        float presence = smoothstep(0.02, 0.50, st);        // растянутый вход → полутень мягче/шире
+        float coreness = smoothstep(0.45, 0.90, st);        // умбра ТУЖЕ: ядро только у контакта,
+        //  всё растянутое (края + дальний хвост) спадает к uEdgeDark → дальше/края прозрачнее (п.2+3)
+        float dust = mix(0.85, 1.0, hash(floor(vUv * 480.0))); // зерно по vUv — идентично блобу
         float dark = presence * mix(uEdgeDark, uCenterDark, coreness) * dust;
         // multiply к тёплому тёмному (не к чёрному) — органично в интерьер
         vec3 mulf = mix(vec3(1.0), uShadowTint, dark);
         gl_FragColor = vec4(texture2D(tBg, cuv).rgb * mulf, 1.0);
+      }
+    `,
+    depthTest: false,
+  })
+}
+
+// Запечённая база (Blender shadow-catcher) КАК ЕСТЬ (юзер: не менять/не улучшать).
+// tBaked.a = покрытие тенью (0 нет .. 1 тень). Просто умножаем плейт на (1 - покрытие):
+// весь софт/penumbra/тон/контакты — уже в бейке, ничего не пересинтезируем и не тонируем.
+// uOffset/uUvScale — позиция/cover-fit. GLSL1.
+export function makeBakedShadowMat(): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    glslVersion: THREE.GLSL1,
+    uniforms: {
+      tBg: { value: null }, tBaked: { value: null },
+      uUvScale: { value: new THREE.Vector2(1, 1) },
+      uOffset: { value: new THREE.Vector2(0, 0) },
+      uMaxShadow: { value: 0.5 }, // потолок черноты: контакты у стоп не уходят в чистый чёрный
+    },
+    vertexShader: MB_VERT,
+    fragmentShader: /* glsl */ `
+      precision highp float;
+      varying vec2 vUv;
+      uniform sampler2D tBg; uniform sampler2D tBaked;
+      uniform vec2 uUvScale; uniform vec2 uOffset; uniform float uMaxShadow;
+      void main() {
+        vec2 cuv = (vUv - 0.5) * uUvScale + 0.5;       // фон
+        vec2 suv = cuv - uOffset;                       // маску тени — опц. смещение (по умолч. 0)
+        float sh = min(texture2D(tBaked, suv).a, uMaxShadow); // покрытие, но не в чистый чёрный
+        gl_FragColor = vec4(texture2D(tBg, cuv).rgb * (1.0 - sh), 1.0);
       }
     `,
     depthTest: false,

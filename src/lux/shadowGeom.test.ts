@@ -226,12 +226,17 @@ describe('proxyCapsuleTransforms (§4.2 ориентация из landmarks)', (
     expect(xfs.find((x) => x.name === 'forearm_L')).toBeUndefined()
   })
 
-  it('голова — сфера (length≈0) у nose', () => {
+  it('головы НЕТ — силуэт оканчивается шеей-пеньком (юзер: убрать всё выше шеи)', () => {
     const p = withJoints((p) => {
-      p[POSE_IDX.NOSE] = [0, 1.7, 0, 1]
+      p[POSE_IDX.L_SHOULDER] = [-0.2, 0.5, 0, 1]
+      p[POSE_IDX.R_SHOULDER] = [0.2, 0.5, 0, 1]
+      p[POSE_IDX.NOSE] = [0, 1.0, 0, 1]
     })
-    const head = proxyCapsuleTransforms(p).find((x) => x.name === 'head')!
-    expect(head).toBeDefined()
-    expect(head.center[1]).toBeCloseTo(1.7, 5)
+    const xfs = proxyCapsuleTransforms(p)
+    expect(xfs.find((x) => x.name === 'head')).toBeUndefined()
+    // шея-пенёк есть, но НЕ достаёт до носа (40% пути) — всё выше шеи убрано
+    const neck = xfs.find((x) => x.name === 'neck')!
+    expect(neck).toBeDefined()
+    expect(neck.center[1]).toBeLessThan(1.0) // ниже носа
   })
 })

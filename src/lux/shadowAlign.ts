@@ -7,7 +7,7 @@
 // Canvas is 9:16 portrait (matches plate aspect 0.5625 1:1) → uUvScale=(1,1), no cover crop.
 import * as THREE from 'three'
 import { ShadowScene3D, staticProxy, type ShadowData } from './shadowScene3D'
-import { makeMultiplyBlitMat } from './multiplyBlit'
+import { makeMultiplyBlitMat, makeBakedShadowMat } from './multiplyBlit'
 import { POSE_IDX } from './shadowGeom'
 
 // Синтетическая «стоячая» поза в КОНВЕНЦИИ MediaPipe world: hip-origin, метры, Y-ВНИЗ
@@ -78,6 +78,10 @@ const SHOW_PROXY = Q.get('showproxy') === '1'
 const DBG_PROXY = Q.get('dbgproxy') === '1' // видимый рендер капсул прокси (диагностика ориентации)
 const HK = Number(Q.get('hk') ?? '0.8') // высота тени = HK·рост (foreshortened пол-тень)
 const OP = Number(Q.get('op') ?? '0.3') // сила тени (меньше = прозрачнее; 0.3 ≈ +50% прозрачности)
+// ?baked=1 — режим запечённой Blender-базы (shadow_baked.png) вместо прокси (Фаза 1).
+const BAKED = Q.get('baked') === '1'
+const BHOFF = Number(Q.get('bhoff') ?? '0') // смещение маски X (опц.)
+const BVOFF = Number(Q.get('bvoff') ?? '0') // смещение маски Y (опц.)
 
 const canvas = document.getElementById('c') as HTMLCanvasElement
 const info = document.getElementById('info') as HTMLDivElement
@@ -132,11 +136,21 @@ multiplyMat.uniforms.tBg.value = compositeRT.texture
 multiplyMat.uniforms.tShadow.value = shadowRT.texture
 multiplyMat.uniforms.uUvScale.value = new THREE.Vector2(1, 1)
 multiplyMat.uniforms.uShadowStrength.value = OP // (не используется новой формулой; оставлено)
-// дефолты = боевые V1 «лёгкая» (makeMultiplyBlitMat), ?uc/?ue/?blur переопределяют для тюна
-multiplyMat.uniforms.uCenterDark.value = Number(Q.get('uc') ?? '0.5') // плотность ядра (умбра)
-multiplyMat.uniforms.uEdgeDark.value = Number(Q.get('ue') ?? '0.2')   // плотность края (полутень)
+// дефолты = боевые V1 «лёгкая» (makeMultiplyBlitMat), ?uc/?ue/?blur/?hoff/?voff переопределяют
+multiplyMat.uniforms.uCenterDark.value = Number(Q.get('uc') ?? '0.36') // плотность ядра (умбра)
+multiplyMat.uniforms.uEdgeDark.value = Number(Q.get('ue') ?? '0.072') // плотность края (полутень)
 multiplyMat.uniforms.uBlur.value = Number(Q.get('blur') ?? '0.009')   // радиус размытия маски (UV)
+multiplyMat.uniforms.uShadowOffset.value.set(
+  Number(Q.get('hoff') ?? '-0.03'), // x: 3% влево
+  Number(Q.get('voff') ?? '0.05'),  // y: подъём к ступням (опущено на 1% от 0.06)
+)
 multiplyMat.uniforms.uShadowFloorK.value = 0.7
+
+// Фаза 1: запечённая Blender-база. tBg=compositeRT(плейт), tBaked=shadow_baked.png.
+const bakedMat = makeBakedShadowMat()
+bakedMat.uniforms.tBg.value = compositeRT.texture
+bakedMat.uniforms.uUvScale.value = new THREE.Vector2(1, 1) // канвас 9:16 = плейт, без cover-кропа
+bakedMat.uniforms.uOffset.value.set(BHOFF, BVOFF)
 
 const quad = new THREE.Mesh(quadGeom, plateMat)
 quadScene.add(quad)
@@ -161,6 +175,16 @@ function renderFrame(): void {
   renderer.setRenderTarget(compositeRT)
   renderer.clear()
   renderer.render(quadScene, quadCam)
+
+  // Фаза 1: запечённая база — multiply shadow_baked.png поверх плейта (без прокси).
+  if (BAKED) {
+    quad.material = bakedMat
+    renderer.setRenderTarget(null)
+    renderer.setClearColor(0x000000, 1)
+    renderer.clear()
+    renderer.render(quadScene, quadCam)
+    return
+  }
 
   // 2) Real shadow scene → shadowRT, WHITE clear (shadow = darkening of white).
   renderer.setRenderTarget(shadowRT)
@@ -204,6 +228,16 @@ async function boot(): Promise<void> {
   // appears upright (same convention the shadow camera renders into shadowRT).
   plateTex.colorSpace = THREE.SRGBColorSpace
   plateMat.uniforms.tPlate.value = plateTex
+
+  // Фаза 1: запечённая Blender-тень (альфа = покрытие). Та же ориентация, что плейт.
+  if (BAKED) {
+    try {
+      const bt = await new THREE.TextureLoader().loadAsync('/assets/worlds/living/shadow_baked.png')
+      bakedMat.uniforms.tBaked.value = bt
+    } catch (err) {
+      console.error('[shadow-align] failed to load shadow_baked.png:', err)
+    }
+  }
 
   // Build the REAL B1 shadow scene from lights.json {lamps, camera, floorZ}.
   shadowScene = new ShadowScene3D(lights, renderer)

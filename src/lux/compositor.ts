@@ -5,10 +5,18 @@
 import * as THREE from 'three'
 
 import { LUX_CONFIG } from './config'
-import { makeMultiplyBlitMat } from './multiplyBlit'
+import { makeMultiplyBlitMat, makeBakedShadowMat } from './multiplyBlit'
 import type { ShadowEllipse } from './shadow'
 import type { ShadowCamera } from './shadowGeom'
 import { ShadowScene3D } from './shadowScene3D'
+
+// Якорь «ступней» бейка в плейт-UV (проекция стойки [4.3,2.5,0]); база следует за feetUV.
+// Тюнятся по живой приёмке (флип/сдвиг — одна правка).
+const BAKED_FEET_U = 0.233
+const BAKED_FEET_V = 0.161
+const BAKED_RAISE = 0.05 // поднять базу на 5% вверх (юзер)
+// Прокси — БЛЕДНЫЙ живой слой ПОВЕРХ запечённой базы (артикуляция рук/ног). Фаза 2 (юзер).
+const PROXY_SHADOW_ENABLED = true
 
 export interface HarmonizeToggles {
   lut: boolean
@@ -66,6 +74,7 @@ export class LuxCompositor {
   private roomShadowMat: THREE.ShaderMaterial // физическая тень по мировым координатам комнаты
   private blobMat: THREE.ShaderMaterial // контактная «тень-капля», приклеена к ступням
   private multiplyBlitMat: THREE.ShaderMaterial // multiply-blit physical-тени (B1.9 wiring)
+  private bakedShadowMat: THREE.ShaderMaterial // Фаза 1: запечённая Blender-база
   private fadeMat: THREE.MeshBasicMaterial
   private shadowScene3D: ShadowScene3D | null = null // B1: реальный 3D-рендер прокси-тени (lazy)
 
@@ -410,11 +419,13 @@ export class LuxCompositor {
       vertexShader: VERT,
       fragmentShader: /* glsl */ `
         varying vec2 vUv; uniform sampler2D tBg; uniform vec2 uCenter, uRadius; uniform float uOpacity;
+        float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
         void main() {
           vec3 bg = texture2D(tBg, vUv).rgb;
           vec2 d = (vUv - uCenter) / uRadius;
           float r = length(d);
-          float a = (1.0 - smoothstep(0.35, 1.0, r)) * uOpacity; // плотнее в центре, мягкий край
+          float dust = mix(0.85, 1.0, hash(floor(vUv * 480.0))); // пыльная текстура (как у прокси-тени)
+          float a = (1.0 - smoothstep(0.35, 1.0, r)) * uOpacity * dust; // плотнее в центре, мягкий край
           gl_FragColor = vec4(bg * (1.0 - a), 1.0);
         }
       `,
@@ -423,6 +434,7 @@ export class LuxCompositor {
 
     this.multiplyBlitMat = makeMultiplyBlitMat()
     this.multiplyBlitMat.uniforms.uShadowFloorK.value = LUX_CONFIG.shadow.shadowFloorK
+    this.bakedShadowMat = makeBakedShadowMat()
 
     this.fadeMat = new THREE.MeshBasicMaterial({
       color: 0x000000, transparent: true, opacity: 0, depthTest: false,
@@ -465,7 +477,7 @@ export class LuxCompositor {
     mirrorOpacity: number
     shadow: ShadowEllipse | null
     shadowStrength: number
-    shadowData: { lamps: { pos: [number, number, number]; weight: number }[]; worldPos: THREE.Texture; floorZ: number; camera: ShadowCamera } | null
+    shadowData: { lamps: { pos: [number, number, number]; weight: number }[]; worldPos: THREE.Texture; floorZ: number; camera: ShadowCamera; bakedShadow?: THREE.Texture | null } | null
     personFloor: { F: [number, number, number]; H: number } | null
     pose: { world: number[][]; healthy: number } | null
     feetUV: { u: number; v: number; halfW: number } | null
@@ -550,10 +562,27 @@ export class LuxCompositor {
     // кроме зоны у ступней → мягкое пятно по форме стоп, без привязки к ногам).
     if (mirrorVisible && opts.toggles.shadow && opts.person) {
       if (opts.shadowData && opts.personFloor) {
-        // C: proxy-тень рисуется ТОЛЬКО при наличии (сглаженной, gated) позы. Нет позы →
-        // тело-тень не рисуем (blob держит контакт; D2 добавит roomShadowMat-fallback). Так
-        // прокси не «замерзает» в последней позе при потере трекинга (ревью C.6).
-        if (opts.pose) {
+        // Фаза 1: запечённая Blender-база (приоритет). Привязка к ступням — сдвигаем маску так,
+        // чтобы её «ноги» легли в живые feetUV. Софт/тон/контакты уже в бейке (не пересинтез).
+        if (opts.shadowData.bakedShadow) {
+          const bsu = this.bakedShadowMat.uniforms
+          bsu.tBg.value = this.compositeRT.texture
+          bsu.tBaked.value = opts.shadowData.bakedShadow
+          bsu.uUvScale.value.copy(this.coverMat.uniforms.uUvScale.value)
+          // привязка к ступням: сдвиг маски так, чтобы «ноги» бейка легли в живые feetUV
+          // (вид тени — как есть из Blender; двигаем только позицию). Нет feetUV → нативно.
+          if (opts.feetUV) {
+            bsu.uOffset.value.set(opts.feetUV.u - BAKED_FEET_U, opts.feetUV.v - BAKED_FEET_V + BAKED_RAISE)
+          } else {
+            bsu.uOffset.value.set(0, BAKED_RAISE)
+          }
+          this.pass(this.bakedShadowMat, this.shadowRT2)
+          this.blitMat.uniforms.tSrc.value = this.shadowRT2.texture
+          this.pass(this.blitMat, this.compositeRT)
+        }
+        // Фаза 2: прокси — БЛЕДНЫЙ живой слой ПОВЕРХ базы (артикуляция рук/ног), идёт ВМЕСТЕ с базой.
+        if (PROXY_SHADOW_ENABLED && opts.pose) {
+          // proxy-тень — ТОЛЬКО при сглаженной gated позе; нет позы → не рисуем (не «замерзает», C.6).
           if (!this.shadowScene3D) {
             this.shadowScene3D = new ShadowScene3D(
               { lamps: opts.shadowData.lamps, camera: opts.shadowData.camera, floorZ: opts.shadowData.floorZ },
@@ -580,6 +609,10 @@ export class LuxCompositor {
           mbu.tShadow.value = this.shadowRT.texture
           mbu.uUvScale.value.copy(this.coverMat.uniforms.uUvScale.value)
           mbu.uShadowStrength.value = opts.shadowStrength
+          // бледный + сильно размытый: только намёк на движение поверх базы (капсульность прячется)
+          mbu.uCenterDark.value = 0.12
+          mbu.uEdgeDark.value = 0.03
+          mbu.uBlur.value = 0.014
           this.pass(this.multiplyBlitMat, this.shadowRT2)
           this.blitMat.uniforms.tSrc.value = this.shadowRT2.texture
           this.pass(this.blitMat, this.compositeRT)

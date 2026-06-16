@@ -613,6 +613,18 @@ export class LuxCompositor {
           mbu.uCenterDark.value = 0.12
           mbu.uEdgeDark.value = 0.03
           mbu.uBlur.value = 0.014
+          // вырез прокси-тени у ног (контакт-стопу держит блоб). Центр = САМИ ступни (без +0.04
+          // подъёма блоба — стопа прокси ниже), радиус щедрый, чтобы убрать остаток следа.
+          if (opts.feetUV) {
+            const cs = this.coverMat.uniforms.uUvScale.value
+            mbu.uFeetCut.value.set(
+              (opts.feetUV.u - 0.5) / cs.x + 0.5,
+              (opts.feetUV.v - 0.5) / cs.y + 0.5,
+            )
+            mbu.uFeetCutR.value = 0.16
+          } else {
+            mbu.uFeetCutR.value = 0.0
+          }
           this.pass(this.multiplyBlitMat, this.shadowRT2)
           this.blitMat.uniforms.tSrc.value = this.shadowRT2.texture
           this.pass(this.blitMat, this.compositeRT)

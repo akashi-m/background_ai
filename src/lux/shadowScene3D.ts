@@ -79,7 +79,6 @@ export class ProxyRig {
   private _capsules = new Map<string, THREE.Mesh>()
   private _mat: THREE.MeshBasicMaterial
   private _q = new THREE.Quaternion()
-  private _contact: THREE.Mesh // плоский диск-лужа у ступней (всегда видим)
 
   constructor() {
     this._mat = new THREE.MeshBasicMaterial()
@@ -94,14 +93,8 @@ export class ProxyRig {
       this._capsules.set(name, mesh)
       this._root.add(mesh)
     }
-    // Контактная лужа: плоский широкий эллипсоид у ступней → низ тени = мягкий полукруг,
-    // плавно сливается с блобом (юзер). НЕ в _capsules → hide-loop позы её не трогает.
-    this._contact = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 8), this._mat)
-    this._contact.castShadow = true
-    this._contact.receiveShadow = false
-    this._contact.scale.set(0.22, 0.22, 0.05) // широкий, плоский
-    this._contact.position.set(0, 0, 0.05)
-    this._root.add(this._contact)
+    // Контактная лужа убрана: контакт у стоп держат блоб + база (запечённая тень).
+    // Прокси — только артикуляция (торс/руки/нога), без отдельной «стопы» под блобом (юзер).
   }
 
   get object(): THREE.Group { return this._root }

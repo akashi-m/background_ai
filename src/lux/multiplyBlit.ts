@@ -94,6 +94,9 @@ export function makeBakedShadowMat(): THREE.ShaderMaterial {
       uUvScale: { value: new THREE.Vector2(1, 1) },
       uOffset: { value: new THREE.Vector2(0, 0) },
       uMaxShadow: { value: 0.5 }, // потолок черноты: контакты у стоп не уходят в чистый чёрный
+      uFeetMask: { value: new THREE.Vector2(0.233, 0.161) }, // «ноги» в маске бейка (центр выреза)
+      uCutR: { value: 0.12 }, // радиус выреза «под телом» (UV) — блоб подхватит контакт
+      uCutFloor: { value: 0.17 }, // у стоп оставить ~17% тени (не в ноль) → мягкий стык с блобом
     },
     vertexShader: MB_VERT,
     fragmentShader: /* glsl */ `
@@ -101,10 +104,14 @@ export function makeBakedShadowMat(): THREE.ShaderMaterial {
       varying vec2 vUv;
       uniform sampler2D tBg; uniform sampler2D tBaked;
       uniform vec2 uUvScale; uniform vec2 uOffset; uniform float uMaxShadow;
+      uniform vec2 uFeetMask; uniform float uCutR; uniform float uCutFloor;
       void main() {
         vec2 cuv = (vUv - 0.5) * uUvScale + 0.5;       // фон
         vec2 suv = cuv - uOffset;                       // маску тени — опц. смещение (по умолч. 0)
         float sh = min(texture2D(tBaked, suv).a, uMaxShadow); // покрытие, но не в чистый чёрный
+        // вырез зоны «под телом»: НЕ в ноль, а до uCutFloor (~17%) → плавный переход в блоб
+        float cut = smoothstep(uCutR * 0.55, uCutR, distance(suv, uFeetMask));
+        sh *= mix(uCutFloor, 1.0, cut);
         gl_FragColor = vec4(texture2D(tBg, cuv).rgb * (1.0 - sh), 1.0);
       }
     `,

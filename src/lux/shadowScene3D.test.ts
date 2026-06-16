@@ -263,12 +263,13 @@ describe('ProxyRig.update (§4.2 привод от позы)', () => {
     expect(rig.object.position.y).toBeCloseTo(1.5, 5)
     expect(rig.object.position.z).toBeCloseTo(0, 5)
   })
-  it('группа масштабируется к росту H (uniform scale > 0)', () => {
+  it('группа масштабируется к росту H (XY uniform, Z = 80% высоты)', () => {
     const rig = new ProxyRig()
     rig.update(standingPose(), new THREE.Vector3(0, 0, 0), 1.7)
     expect(rig.object.scale.x).toBeGreaterThan(0)
     expect(rig.object.scale.x).toEqual(rig.object.scale.y)
-    expect(rig.object.scale.y).toEqual(rig.object.scale.z)
+    // высота тени = 80% роста человека (тень короче, чем сам силуэт)
+    expect(rig.object.scale.z).toBeCloseTo(rig.object.scale.y * 0.8, 6)
   })
   it('бОльший H → бОльший скейл', () => {
     const small = new ProxyRig(); small.update(standingPose(), new THREE.Vector3(0, 0, 0), 1.4)

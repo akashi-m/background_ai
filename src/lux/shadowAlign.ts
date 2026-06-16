@@ -30,6 +30,40 @@ function simPose(): number[][] {
   return p
 }
 
+// Статичный «человечек» из примитивов (Z-up, ступни на z=0, голова ~z=H): голова-сфера,
+// торс пошире, руки/ноги-капсулы. Невидимый кастер (colorWrite=false) — для оценки ФОРМЫ тени.
+// Капсула three по локальной Y → ставим вертикально (rotation.x=+π/2 → ось +Z).
+function simHumanMesh(): THREE.Group {
+  const g = new THREE.Group()
+  const mat = new THREE.MeshBasicMaterial()
+  mat.colorWrite = false
+  mat.depthWrite = false
+  // ТЕЛО — вертикальный овал (верхняя часть), без швов рук/головы.
+  // Камера смотрит вдоль +X, поэтому лево-право человека = ось Y (ширина по Y).
+  const body = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 24), mat)
+  body.scale.set(0.13, 0.18, 0.52) // X=глубина, Y=ширина(экран), Z=рост
+  body.position.set(0, 0, 0.92)
+  body.castShadow = true
+  body.receiveShadow = false
+  g.add(body)
+  // ДВЕ НОГИ «/\»: от бедра (центр, z≈0.6) к ступням ВРОЗЬ по Y (z≈0, y=±0.20) —
+  // тень начинается от двух стоп и сходится вверх в тело (низ тени прикреплён к ногам).
+  const leg = (hipY: number, footY: number): THREE.Mesh => {
+    const hip = new THREE.Vector3(0, hipY, 0.6)    // бёдра почти вместе
+    const foot = new THREE.Vector3(0, footY, 0.03) // ступни ВРОЗЬ по Y (экран-горизонталь)
+    const dir = foot.clone().sub(hip)
+    const m = new THREE.Mesh(new THREE.CapsuleGeometry(0.06, Math.max(0.001, dir.length() - 0.12), 6, 12), mat)
+    m.position.copy(hip).add(foot).multiplyScalar(0.5)
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize())
+    m.castShadow = true
+    m.receiveShadow = false
+    return m
+  }
+  g.add(leg(-0.05, -0.20)) // «/» левая
+  g.add(leg(0.05, 0.20))   // «\» правая
+  return g
+}
+
 const PLATE_URL = '/assets/worlds/living/photo.png'
 const LIGHTS_URL = '/assets/worlds/living/lights.json'
 
@@ -42,6 +76,8 @@ const PY = Number(Q.get('py') ?? '2.0')
 const PH = Number(Q.get('h') ?? '1.7')
 const SHOW_PROXY = Q.get('showproxy') === '1'
 const DBG_PROXY = Q.get('dbgproxy') === '1' // видимый рендер капсул прокси (диагностика ориентации)
+const HK = Number(Q.get('hk') ?? '0.8') // высота тени = HK·рост (foreshortened пол-тень)
+const OP = Number(Q.get('op') ?? '0.3') // сила тени (меньше = прозрачнее; 0.3 ≈ +50% прозрачности)
 
 const canvas = document.getElementById('c') as HTMLCanvasElement
 const info = document.getElementById('info') as HTMLDivElement
@@ -95,7 +131,11 @@ const multiplyMat = makeMultiplyBlitMat()
 multiplyMat.uniforms.tBg.value = compositeRT.texture
 multiplyMat.uniforms.tShadow.value = shadowRT.texture
 multiplyMat.uniforms.uUvScale.value = new THREE.Vector2(1, 1)
-multiplyMat.uniforms.uShadowStrength.value = 0.6
+multiplyMat.uniforms.uShadowStrength.value = OP // (не используется новой формулой; оставлено)
+// дефолты = боевые V1 «лёгкая» (makeMultiplyBlitMat), ?uc/?ue/?blur переопределяют для тюна
+multiplyMat.uniforms.uCenterDark.value = Number(Q.get('uc') ?? '0.5') // плотность ядра (умбра)
+multiplyMat.uniforms.uEdgeDark.value = Number(Q.get('ue') ?? '0.2')   // плотность края (полутень)
+multiplyMat.uniforms.uBlur.value = Number(Q.get('blur') ?? '0.009')   // радиус размытия маски (UV)
 multiplyMat.uniforms.uShadowFloorK.value = 0.7
 
 const quad = new THREE.Mesh(quadGeom, plateMat)
@@ -170,15 +210,22 @@ async function boot(): Promise<void> {
   // СИМУЛЯЦИЯ позы: гоним синтетическую стоячую позу в РЕАЛЬНЫЙ proxyRig (без камеры/человека),
   // ставим его на видимый пол [PX,PY] и делаем кастером. Так итерируем форму/маппинг тени.
   // ?sim=static — вернуть простой staticProxy для сравнения.
-  if (Q.get('sim') === 'static') {
+  const sim = Q.get('sim') || 'human'
+  if (sim === 'static') {
     shadowScene.setCaster(staticProxy([PX, PY, lights.floorZ], PH))
-  } else {
+  } else if (sim === 'proxy') {
     shadowScene.proxyRig.update(simPose(), new THREE.Vector3(PX, PY, lights.floorZ), PH)
     shadowScene.setCaster(shadowScene.proxyRig.object)
+  } else {
+    // дефолт: гладкий человеко-меш (оценка формы тени)
+    const human = simHumanMesh()
+    human.position.set(PX, PY, lights.floorZ)
+    human.scale.set(1, 1, HK) // высота тени = HK·рост (ширина не трогается)
+    shadowScene.setCaster(human)
   }
   if (DBG_PROXY) {
-    // делаем капсулы прокси видимыми (по умолчанию colorWrite=false) — для диагностики
-    shadowScene.proxyRig.object.traverse((o) => {
+    // видимый рендер активного кастера (диагностика формы/ориентации)
+    shadowScene.caster.traverse((o) => {
       const m = o as THREE.Mesh
       if (m.isMesh) m.material = new THREE.MeshBasicMaterial({ color: 0xff4444 })
     })

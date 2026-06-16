@@ -124,7 +124,8 @@ export class ProxyRig {
     const height = hasVis ? maxZ - minZ : 0
     const s = height > 1e-3 ? H / height : 1
     this._root.position.copy(F)
-    this._root.scale.setScalar(s)
+    // высота тени = 0.8·рост (foreshortened пол-тень), ширина пропорциональна росту
+    this._root.scale.set(s, s, s * 0.8)
 
     const xfs = proxyCapsuleTransforms(mapped)
     const used = new Set<string>()
@@ -162,6 +163,7 @@ export function keyPointLights(lamps: Lamp[]): THREE.PointLight[] {
       light.shadow.mapSize.set(2048, 2048)
       light.shadow.bias = -0.0005
       light.shadow.normalBias = 0.03
+      light.shadow.radius = 8 // PCFSoft: мягкая кромка shadow-map (диффузный контур)
     }
     return light
   })

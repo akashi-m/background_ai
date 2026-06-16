@@ -14,16 +14,22 @@ describe('LUX_CONFIG.shadow новые поля', () => {
   })
 })
 
-describe('multiplyShadowTerm (числовое зеркало multiplyBlitMat)', () => {
-  it('вне тени (shadowSample=1.0): множитель = 1.0', () => {
-    expect(multiplyShadowTerm(1.0, 0.6, 0.7)).toBeCloseTo(1.0, 6)
+describe('multiplyShadowTerm (числовое зеркало затемнения multiplyBlitMat)', () => {
+  // сигнатура: (shadowSample, edgeDark, centerDark) → dark ∈ [0..centerDark]
+  it('вне тени (shadowSample=1.0): dark = 0 (множитель к фону = 1)', () => {
+    expect(multiplyShadowTerm(1.0, 0.2, 0.5)).toBeCloseTo(0.0, 6)
   })
-  it('самая плотная тень (shadowSample=0.0): 1 - strength*floorK', () => {
-    expect(multiplyShadowTerm(0.0, 0.6, 0.7)).toBeCloseTo(0.58, 6)
+  it('плотное ядро (shadowSample=0.0): dark = centerDark (умбра)', () => {
+    expect(multiplyShadowTerm(0.0, 0.2, 0.5)).toBeCloseTo(0.5, 6)
   })
-  it('никогда не в чёрный: ограничен снизу потолком', () => {
-    expect(multiplyShadowTerm(0.0, 1.0, 0.7)).toBeCloseTo(0.3, 6)
-    expect(multiplyShadowTerm(0.0, 1.0, 0.7)).toBeGreaterThan(0)
+  it('монотонность: гуще тень → больше затемнение', () => {
+    const light = multiplyShadowTerm(0.7, 0.2, 0.5)  // полутень
+    const core = multiplyShadowTerm(0.1, 0.2, 0.5)   // ближе к ядру
+    expect(core).toBeGreaterThan(light)
+  })
+  it('ограничен сверху centerDark → mix(1,tint) никогда не в чёрный', () => {
+    expect(multiplyShadowTerm(0.0, 0.2, 0.5)).toBeLessThanOrEqual(0.5)
+    expect(multiplyShadowTerm(0.0, 0.2, 0.5)).toBeGreaterThan(0)
   })
 })
 

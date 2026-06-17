@@ -1,6 +1,7 @@
 """Конфигурация capture-сервиса: pydantic-модель + разбор CLI."""
 
 import argparse
+import sys
 from typing import Literal
 
 from pydantic import BaseModel
@@ -33,6 +34,12 @@ def auto_bitrate_mbps(width: int, height: int) -> float:
     return max(8.0, float(round(sbs_pixels * 6 / 1_000_000)))
 
 
+def auto_ratio(width: int, height: int) -> float:
+    """Рекомендованный downsample_ratio RVM по разрешению: целим длинную сторону
+    даунсэмпл-входа ≈768 px (сладкая зона сегментации). 1080p→0.4, 4K→0.2 (как в доке RVM)."""
+    return round(min(1.0, max(0.1, 768 / max(width, height))), 2)
+
+
 def parse_args(argv: list[str] | None = None) -> CaptureConfig:
     p = argparse.ArgumentParser(description="Stellar Mirror Lux capture-сервис")
     p.add_argument("--source", default="webcam",
@@ -62,6 +69,17 @@ def parse_args(argv: list[str] | None = None) -> CaptureConfig:
         p.error("источник file требует путь: --source file:клип.mp4")
     if not 0.05 <= a.ratio <= 1.0:
         p.error(f"--ratio вне диапазона 0.05..1.0: {a.ratio}")
+    # B2: гард ratio↔разрешение (только RVM). Вне зоны — край матта страдает (под/пере-разрешение
+    # ветки сегментации). Лог-only, поведение не меняем; у тебя 0.4@1080p → 768px = в норме.
+    if a.engine == "rvm":
+        ds_long = max(a.width, a.height) * a.ratio
+        if not 256.0 <= ds_long <= 1024.0:
+            print(
+                f"[capture] warn: --ratio {a.ratio} @ {a.width}x{a.height} → даунсэмпл "
+                f"{ds_long:.0f}px вне 256..1024, край матта может страдать; реком. "
+                f"--ratio {auto_ratio(a.width, a.height)}",
+                file=sys.stderr,
+            )
 
     bitrate = a.bitrate if a.bitrate is not None else auto_bitrate_mbps(a.width, a.height)
 

@@ -16,6 +16,14 @@ class MattingEngine(Protocol):
         """
         ...
 
+    def reset(self) -> None:
+        """Сбросить временное состояние (recurrent RVM) — смена сцены/посетителя.
+
+        Без сброса recurrent-память предыдущего человека «гостит» на первых кадрах
+        нового → смазанный край на входе. Pipeline зовёт это при выходе посетителя.
+        """
+        ...
+
 
 def make_engine(cfg: CaptureConfig) -> MattingEngine:
     if cfg.engine == "rvm":

@@ -67,6 +67,7 @@ class Pipeline:
         self._fps = 0.0
         self._errors = 0
         self._last_error: str | None = None
+        self._prev_present = False  # для сброса recurrent-state матта при выходе посетителя
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -111,7 +112,12 @@ class Pipeline:
                     continue
                 fg, alpha = self._engine.process(frame.rgb)
                 coverage, bbox_h, bbox = _mask_stats(alpha)
-                self._presence.update(coverage=coverage, bbox_height_ratio=bbox_h)
+                state = self._presence.update(coverage=coverage, bbox_height_ratio=bbox_h)
+                # посетитель ВЫШЕЛ → сброс recurrent-state матта: следующий войдёт без «госта»
+                # (recurrent-память предыдущего не смажет первые кадры нового).
+                if self._prev_present and not state.present:
+                    self._engine.reset()
+                self._prev_present = state.present
                 sbs = pack_sbs(fg, alpha)
                 pose_pkt = (
                     self._pose.process(frame.rgb, frame.t_ms)

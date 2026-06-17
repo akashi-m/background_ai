@@ -31,3 +31,7 @@ class MediapipeEngine:
             mask = mask[:, :, 0]
         # деконтаминации нет — цвет переднего плана = входной кадр
         return rgb, np.ascontiguousarray(mask, dtype=np.float32)
+
+    def reset(self) -> None:
+        """No-op: у MediaPipe нет межпосетительской recurrent-памяти как у RVM."""
+        return None

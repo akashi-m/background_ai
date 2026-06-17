@@ -61,7 +61,7 @@ async function start() {
     renderer,
     Math.floor(innerWidth * renderer.getPixelRatio()),
     Math.floor(innerHeight * renderer.getPixelRatio()),
-    { wrapStrength: LUX_CONFIG.wrapStrength, grainAmount: LUX_CONFIG.grainAmount, feather: LUX_CONFIG.feather, colorMatch: LUX_CONFIG.colorMatch, shadeAmount: LUX_CONFIG.shadeAmount, erode: LUX_CONFIG.erode },
+    { wrapStrength: LUX_CONFIG.wrapStrength, grainAmount: LUX_CONFIG.grainAmount, feather: LUX_CONFIG.feather, colorMatch: LUX_CONFIG.colorMatch, shadeAmount: LUX_CONFIG.shadeAmount, erode: LUX_CONFIG.erode, bloom: LUX_CONFIG.bloom, contrast: LUX_CONFIG.contrast, temp: LUX_CONFIG.temp },
   )
   addEventListener('resize', () => {
     renderer.setSize(innerWidth, innerHeight)
@@ -95,7 +95,7 @@ async function start() {
     worlds.filter((w) => w.meta.format === 'photo25d').map((w) => `/assets/worlds/${w.name}/${w.meta.file}`),
   )
   const shadowSmooth = new SmoothedShadow()
-  const toggles: HarmonizeToggles = { lut: true, wrap: true, shadow: true, grain: true, colorMatch: true }
+  const toggles: HarmonizeToggles = { lut: true, wrap: true, shadow: true, grain: true, colorMatch: true, bloom: true }
 
   const ui = new LuxUI((i) => switcher.switchTo(i))
   ui.setWorlds(interiorLabels(worlds.map((w) => w.meta)))
@@ -119,6 +119,7 @@ async function start() {
     if (e.code === 'F3') toggles.shadow = !toggles.shadow
     if (e.code === 'F4') toggles.grain = !toggles.grain
     if (e.code === 'F6') toggles.colorMatch = !toggles.colorMatch
+    if (e.code === 'F7') toggles.bloom = !toggles.bloom
     if (e.code === 'F5') experience.forceNext()
     if (e.code === 'Comma' || e.code === 'Period') {
       parallaxGain = Math.round(Math.min(2, Math.max(0.1, parallaxGain + (e.code === 'Period' ? 0.05 : -0.05))) * 100) / 100

@@ -24,6 +24,7 @@ export interface HarmonizeToggles {
   shadow: boolean
   grain: boolean
   colorMatch: boolean
+  bloom: boolean
 }
 
 export interface SlideState {
@@ -65,6 +66,7 @@ export class LuxCompositor {
 
   private blitMat: THREE.ShaderMaterial
   private blurMat: THREE.ShaderMaterial
+  private bloomBrightMat: THREE.ShaderMaterial
   private meanMat: THREE.ShaderMaterial
   private grainMat: THREE.ShaderMaterial
   private coverMat: THREE.ShaderMaterial // flat-фон: cover-fit плейт без 3D-камеры
@@ -85,6 +87,7 @@ export class LuxCompositor {
     tuning: {
       wrapStrength: number; grainAmount: number; feather: [number, number]
       colorMatch: { cast: number; exposure: number }; shadeAmount: number; erode: number
+      bloom: number; contrast: number; temp: number
     },
   ) {
     this.sceneRT = new THREE.WebGLRenderTarget(width, height)
@@ -164,18 +167,38 @@ export class LuxCompositor {
       uniforms: {
         tSrc: { value: null }, uGrain: { value: tuning.grainAmount },
         uGrainOn: { value: 1 }, uTime: { value: 0 },
+        // общий Bloom: добавляется ДО зерна (свечение ярких зон поверх всего композита)
+        tBloom: { value: null }, uBloom: { value: tuning.bloom }, uBloomOn: { value: 1 },
       },
       vertexShader: VERT,
       fragmentShader: /* glsl */ `
         varying vec2 vUv; uniform sampler2D tSrc;
         uniform float uGrain; uniform float uGrainOn; uniform float uTime;
+        uniform sampler2D tBloom; uniform float uBloom; uniform float uBloomOn;
         float hash(vec2 p) {
           return fract(sin(dot(p, vec2(127.1, 311.7)) + uTime) * 43758.5453);
         }
         void main() {
           vec3 c = texture2D(tSrc, vUv).rgb;
+          if (uBloomOn > 0.5) c += texture2D(tBloom, vUv).rgb * uBloom; // оптическое свечение
           if (uGrainOn > 0.5) c += (hash(gl_FragCoord.xy) - 0.5) * uGrain;
           gl_FragColor = vec4(c, 1.0);
+        }
+      `,
+      depthTest: false,
+    })
+
+    // Bloom bright-pass: оставляет только яркие зоны (лампы/окна/LED) выше порога,
+    // затем размывается (blurMat, ¼-res) и аддитивно добавляется в grainMat.
+    this.bloomBrightMat = new THREE.ShaderMaterial({
+      uniforms: { tSrc: { value: null }, uThreshold: { value: 0.72 } },
+      vertexShader: VERT,
+      fragmentShader: /* glsl */ `
+        varying vec2 vUv; uniform sampler2D tSrc; uniform float uThreshold;
+        void main() {
+          vec3 c = texture2D(tSrc, vUv).rgb;
+          float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+          gl_FragColor = vec4(c * smoothstep(uThreshold, 1.0, l), 1.0);
         }
       `,
       depthTest: false,
@@ -223,6 +246,8 @@ export class LuxCompositor {
         uWrapStrength: { value: tuning.wrapStrength },
         uCast: { value: tuning.colorMatch.cast },
         uExp: { value: tuning.colorMatch.exposure },
+        uContrast: { value: tuning.contrast }, // контраст вокруг средне-серого
+        uTemp: { value: tuning.temp },         // температура: тёплый(+)/холодный(−)
         uShade: { value: tuning.shadeAmount },
         uShadeDirX: { value: 0 },
         uLutOn: { value: 1 },
@@ -239,6 +264,7 @@ export class LuxCompositor {
         uniform float uOpacity; uniform vec2 uUvScale; uniform vec2 uUvOffset;
         uniform vec2 uFeather; uniform float uErode; uniform float uWrapStrength;
         uniform float uCast; uniform float uExp;
+        uniform float uContrast; uniform float uTemp;
         uniform float uShade; uniform float uShadeDirX;
         uniform float uLutOn; uniform float uWrapOn;
         uniform float uColorMatchOn;
@@ -276,6 +302,9 @@ export class LuxCompositor {
             vec3 castMul = mix(vec3(1.0), chroma, uCast);
             float expMul = mix(1.0, luma / 0.5, uExp);
             rgb = clamp(rgb * castMul * expMul, 0.0, 1.0);
+            // контраст вокруг средне-серого + температура (тёплый +R−B / холодный −R+B)
+            rgb = clamp((rgb - 0.5) * uContrast + 0.5, 0.0, 1.0);
+            rgb = clamp(rgb + vec3(uTemp, 0.0, -uTemp), 0.0, 1.0);
           }
 
           // направленный свет сцены: сторона к ключу ярче, от ключа темнее
@@ -703,6 +732,22 @@ export class LuxCompositor {
       u.uUvScale.value.set(sx, sy)
       this.pass(this.personMat, this.compositeRT)
     }
+
+    // 5б. Bloom: яркие зоны (лампы/окна/LED) → размытие (¼-res, переиспользуем wrapRT) →
+    // аддитивно в финальном пассе. Общий буфер — свечение поверх всего композита.
+    if (opts.toggles.bloom) {
+      this.bloomBrightMat.uniforms.tSrc.value = this.compositeRT.texture
+      this.pass(this.bloomBrightMat, this.wrapRT_A)
+      const bt = new THREE.Vector2(1 / this.wrapRT_A.width, 1 / this.wrapRT_A.height)
+      this.blurMat.uniforms.tSrc.value = this.wrapRT_A.texture
+      this.blurMat.uniforms.uDir.value.set(bt.x, 0)
+      this.pass(this.blurMat, this.wrapRT_B)
+      this.blurMat.uniforms.tSrc.value = this.wrapRT_B.texture
+      this.blurMat.uniforms.uDir.value.set(0, bt.y)
+      this.pass(this.blurMat, this.wrapRT_A)
+      this.grainMat.uniforms.tBloom.value = this.wrapRT_A.texture
+    }
+    this.grainMat.uniforms.uBloomOn.value = opts.toggles.bloom ? 1 : 0
 
     // 6. финальное зерно на весь кадр: compositeRT → экран
     this.renderer.clear()

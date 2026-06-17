@@ -66,30 +66,37 @@ header [data-mirror] { margin-top: 2.4vh; } /* селектор интерьер
 
 .lux-interiors {
   display: flex;
-  gap: 1.2vw;
+  gap: 1.6vw;
   justify-content: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;   /* один ряд */
 }
 
 .lux-btn {
   pointer-events: auto;
   cursor: pointer;
   font-family: var(--lux-font);
-  font-size: clamp(13px, 1.3vw, 18px);
-  letter-spacing: 0.22em;
-  text-indent: 0.22em;
+  font-size: clamp(11px, 1.15vw, 16px);
+  letter-spacing: 0.18em;
+  text-indent: 0.18em;
   text-transform: uppercase;
+  white-space: nowrap;
   color: var(--lux-text);
-  background: rgba(11, 10, 8, 0.55);
-  border: 1px solid rgba(217, 184, 120, 0.45);
-  border-radius: 2px;
-  padding: 1.4vh 2.6vw;
+  background: rgba(11, 10, 8, 0.28);              /* полупрозрачное стекло */
+  border: 1px solid rgba(217, 184, 120, 0.5);
+  border-radius: 999px;                            /* скруглённые углы (пилюля) */
+  padding: 1.15vh 2vw;
   backdrop-filter: blur(10px);
-  transition: border-color 0.25s, background 0.25s, color 0.25s;
+  box-shadow: 0 0 10px rgba(217, 184, 120, 0.18); /* желтоватый контур как от света */
+  transition: border-color 0.25s, background 0.25s, color 0.25s, box-shadow 0.25s;
 }
-.lux-btn:hover { border-color: var(--lux-gold); }
+.lux-btn:hover {
+  border-color: var(--lux-gold);
+  box-shadow: 0 0 16px rgba(217, 184, 120, 0.32);
+}
 .lux-btn.active {
   border-color: var(--lux-gold);
-  background: rgba(217, 184, 120, 0.16);
+  background: rgba(217, 184, 120, 0.14);
   color: var(--lux-gold);
+  /* выбранный — ярче свечение (свет-контур сильнее) */
+  box-shadow: 0 0 22px rgba(217, 184, 120, 0.55), inset 0 0 12px rgba(217, 184, 120, 0.12);
 }

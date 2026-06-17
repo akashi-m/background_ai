@@ -84,7 +84,7 @@ export class LuxCompositor {
     height: number,
     tuning: {
       wrapStrength: number; grainAmount: number; feather: [number, number]
-      colorMatch: { cast: number; exposure: number }; shadeAmount: number
+      colorMatch: { cast: number; exposure: number }; shadeAmount: number; erode: number
     },
   ) {
     this.sceneRT = new THREE.WebGLRenderTarget(width, height)
@@ -219,6 +219,7 @@ export class LuxCompositor {
         uUvScale: { value: new THREE.Vector2(1, 1) },
         uUvOffset: { value: new THREE.Vector2(0, 0) },
         uFeather: { value: new THREE.Vector2(tuning.feather[0], tuning.feather[1]) },
+        uErode: { value: tuning.erode }, // эрозия альфы (UV) — срезает гало-бахрому RVM
         uWrapStrength: { value: tuning.wrapStrength },
         uCast: { value: tuning.colorMatch.cast },
         uExp: { value: tuning.colorMatch.exposure },
@@ -236,7 +237,7 @@ export class LuxCompositor {
         uniform sampler2D tVideo; uniform sampler3D tLut; uniform float uLutSize;
         uniform sampler2D tWrap; uniform sampler2D tMean;
         uniform float uOpacity; uniform vec2 uUvScale; uniform vec2 uUvOffset;
-        uniform vec2 uFeather; uniform float uWrapStrength;
+        uniform vec2 uFeather; uniform float uErode; uniform float uWrapStrength;
         uniform float uCast; uniform float uExp;
         uniform float uShade; uniform float uShadeDirX;
         uniform float uLutOn; uniform float uWrapOn;
@@ -249,7 +250,14 @@ export class LuxCompositor {
           if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) discard;
           vec2 uvm = vec2(1.0 - uv.x, uv.y);
           vec3 rgb = texture(tVideo, vec2(uvm.x * 0.5, uvm.y)).rgb;
-          float a = texture(tVideo, vec2(0.5 + uvm.x * 0.5, uvm.y)).r;
+          // альфа из правой половины SBS + ЭРОЗИЯ (min по соседям): поджимает матт внутрь,
+          // срезая полупрозрачную гало-бахрому RVM (грязный край) ДО feather.
+          vec2 av = vec2(0.5 + uvm.x * 0.5, uvm.y);
+          float a = texture(tVideo, av).r;
+          a = min(a, texture(tVideo, av + vec2(uErode, 0.0)).r);
+          a = min(a, texture(tVideo, av + vec2(-uErode, 0.0)).r);
+          a = min(a, texture(tVideo, av + vec2(0.0, uErode)).r);
+          a = min(a, texture(tVideo, av + vec2(0.0, -uErode)).r);
           a = smoothstep(uFeather.x, uFeather.y, a);
 
           // LUT интерьера
@@ -278,7 +286,8 @@ export class LuxCompositor {
           // light wrap: фон «обнимает» контур (максимум на полупрозрачном крае)
           if (uWrapOn > 0.5) {
             vec3 wrapC = texture(tWrap, vUv).rgb;
-            float edge = a * (1.0 - a) * 4.0;
+            // полоса кромки расширена внутрь (sqrt) → свет фона затекает глубже на контур
+            float edge = sqrt(clamp(a * (1.0 - a) * 4.0, 0.0, 1.0));
             rgb = mix(rgb, wrapC, uWrapStrength * edge);
           }
 

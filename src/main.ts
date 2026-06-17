@@ -14,6 +14,7 @@ import { LUX_CONFIG } from './lux/config'
 import { PersonStream } from './lux/personStream'
 import { Experience } from './lux/experience'
 import { LuxCompositor, type HarmonizeToggles } from './lux/compositor'
+import { createDevPanel } from './lux/devPanel'
 import { IdleSlides } from './lux/idle'
 import { loadLutTexture } from './lux/lut'
 import { shadowFromBbox, SmoothedShadow } from './lux/shadow'
@@ -100,6 +101,23 @@ async function start() {
   const ui = new LuxUI((i) => switcher.switchTo(i))
   ui.setWorlds(interiorLabels(worlds.map((w) => w.meta)))
 
+  // dev-панель реал-тайм тюна пост-обработки (тоггл G; скрыта по умолчанию)
+  const devPanel = createDevPanel(
+    [
+      { key: 'wrapStrength', label: 'light wrap', min: 0, max: 1, step: 0.01, value: LUX_CONFIG.wrapStrength },
+      { key: 'erode', label: 'erode (RVM)', min: 0, max: 0.01, step: 0.0005, value: LUX_CONFIG.erode },
+      { key: 'grainAmount', label: 'grain', min: 0, max: 0.15, step: 0.005, value: LUX_CONFIG.grainAmount },
+      { key: 'bloom', label: 'bloom', min: 0, max: 1.5, step: 0.05, value: LUX_CONFIG.bloom },
+      { key: 'bloomThreshold', label: 'bloom thr', min: 0.4, max: 1, step: 0.02, value: 0.72 },
+      { key: 'contrast', label: 'contrast', min: 0.8, max: 1.4, step: 0.01, value: LUX_CONFIG.contrast },
+      { key: 'temp', label: 'temp', min: -0.1, max: 0.1, step: 0.005, value: LUX_CONFIG.temp },
+      { key: 'shade', label: 'shade', min: 0, max: 0.5, step: 0.01, value: LUX_CONFIG.shadeAmount },
+      { key: 'cast', label: 'colorMatch cast', min: 0, max: 1, step: 0.01, value: LUX_CONFIG.colorMatch.cast },
+      { key: 'exposure', label: 'colorMatch exp', min: 0, max: 0.5, step: 0.01, value: LUX_CONFIG.colorMatch.exposure },
+    ],
+    (key, value) => compositor.setTuning(key, value),
+  )
+
   new AlignController(() => worlds[switcher.index], () => SCENE_CONFIG.worlds[switcher.index])
 
   const PRODUCTION_SCREEN_W_CM = 120
@@ -112,6 +130,8 @@ async function start() {
     if (e.target instanceof HTMLInputElement) return
     if (e.code === 'KeyW') switcher.next()
     if (e.code === 'KeyM') switcher.prev()
+    if (e.code === 'KeyG') devPanel.toggle() // dev-панель тюна пост-обработки
+
     const digit = /^Digit([1-9])$/.exec(e.code)
     if (digit) switcher.switchTo(Number(digit[1]) - 1)
     if (e.code === 'F1') toggles.lut = !toggles.lut

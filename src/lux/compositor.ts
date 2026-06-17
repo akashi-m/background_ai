@@ -479,6 +479,23 @@ export class LuxCompositor {
     })
   }
 
+  // Реал-тайм тюн пост-обработки (dev-панель): правит юниформы без пересборки.
+  setTuning(key: string, value: number): void {
+    const p = this.personMat.uniforms
+    switch (key) {
+      case 'wrapStrength': p.uWrapStrength.value = value; break
+      case 'erode': p.uErode.value = value; break
+      case 'cast': p.uCast.value = value; break
+      case 'exposure': p.uExp.value = value; break
+      case 'contrast': p.uContrast.value = value; break
+      case 'temp': p.uTemp.value = value; break
+      case 'shade': p.uShade.value = value; break
+      case 'grainAmount': this.grainMat.uniforms.uGrain.value = value; break
+      case 'bloom': this.grainMat.uniforms.uBloom.value = value; break
+      case 'bloomThreshold': this.bloomBrightMat.uniforms.uThreshold.value = value; break
+    }
+  }
+
   setSize(width: number, height: number): void {
     this.sceneRT.setSize(width, height)
     this.wrapRT_A.setSize(width >> 2, height >> 2)

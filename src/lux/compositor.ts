@@ -278,13 +278,22 @@ export class LuxCompositor {
           vec3 rgb = texture(tVideo, vec2(uvm.x * 0.5, uvm.y)).rgb;
           // альфа из правой половины SBS + ЭРОЗИЯ (min по соседям): поджимает матт внутрь,
           // срезая полупрозрачную гало-бахрому RVM (грязный край) ДО feather.
-          vec2 av = vec2(0.5 + uvm.x * 0.5, uvm.y);
+          // Все альфа-тапы КЛАМПим в альфа-половину [0.5+eps, 1-eps] — иначе −uErode и
+          // билинейный шов залезают в RGB-половину (.r цвета как альфа → выемка по краю).
+          float ax0 = 0.5 + 0.0015, ax1 = 1.0 - 0.0015;
+          vec2 av = vec2(clamp(0.5 + uvm.x * 0.5, ax0, ax1), uvm.y);
           float a = texture(tVideo, av).r;
-          a = min(a, texture(tVideo, av + vec2(uErode, 0.0)).r);
-          a = min(a, texture(tVideo, av + vec2(-uErode, 0.0)).r);
+          a = min(a, texture(tVideo, vec2(min(av.x + uErode, ax1), av.y)).r);
+          a = min(a, texture(tVideo, vec2(max(av.x - uErode, ax0), av.y)).r);
           a = min(a, texture(tVideo, av + vec2(0.0, uErode)).r);
           a = min(a, texture(tVideo, av + vec2(0.0, -uErode)).r);
           a = smoothstep(uFeather.x, uFeather.y, a);
+          // затухание у КРОМКИ кадра: матт растворяется в леттербокс, а не бритвенный срез.
+          // Высокий/близкий человек (голова у верхней границы / ступни у нижней) — мягкий
+          // контур вместо горизонтального среза. Полоса узкая (3%), фигуру в кадре не трогает.
+          float fe = 0.03;
+          a *= smoothstep(0.0, fe, uv.x) * smoothstep(0.0, fe, 1.0 - uv.x)
+             * smoothstep(0.0, fe, uv.y) * smoothstep(0.0, fe, 1.0 - uv.y);
 
           // LUT интерьера
           if (uLutOn > 0.5) {
@@ -673,8 +682,8 @@ export class LuxCompositor {
           if (opts.feetUV) {
             const cs = this.coverMat.uniforms.uUvScale.value
             mbu.uFeetCut.value.set(
-              (opts.feetUV.u - 0.5) / cs.x + 0.5,
-              (opts.feetUV.v - 0.5) / cs.y + 0.5,
+              Math.min(1, Math.max(0, (opts.feetUV.u - 0.5) / cs.x + 0.5)),
+              Math.min(1, Math.max(0, (opts.feetUV.v - 0.5) / cs.y + 0.5)),
             )
             mbu.uFeetCutR.value = 0.16
           } else {
@@ -723,7 +732,12 @@ export class LuxCompositor {
       if (opts.feetUV) {
         const b = this.blobMat.uniforms
         b.tBg.value = this.compositeRT.texture
-        b.uCenter.value.set((opts.feetUV.u - 0.5) / sx + 0.5, (opts.feetUV.v - 0.5) / sy + 0.5 + 0.04) // 0.06→0.04: ниже на 2% (юзер)
+        // центр блоба — экранные ступни (cover-fit ремап), КЛАМП в [0,1]: при высоком/близком
+        // (ноги у кромки) центр не уезжает за кадр → контакт-тень не пропадает. 0.06→0.04: ниже 2% (юзер)
+        b.uCenter.value.set(
+          Math.min(1, Math.max(0, (opts.feetUV.u - 0.5) / sx + 0.5)),
+          Math.min(1, Math.max(0, (opts.feetUV.v - 0.5) / sy + 0.5 + 0.04)),
+        )
         const rx = (opts.feetUV.halfW / sx) * 1.0
         b.uRadius.value.set(rx, rx * 0.3)
         b.uOpacity.value = 0.36 * opts.mirrorOpacity // непрозрачность блоба = 0.36 (юзер)

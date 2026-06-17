@@ -67,7 +67,7 @@ export function personFloorWorld(t: PersonTelemetry, cam: ShadowCamera, floorZ: 
   const fwd = norm(sub(cam.target, cam.pos))
   // правый вектор (горизонталь): fwd × up(0,0,1)
   const right = norm([fwd[1] * 1 - 0, 0 - fwd[0] * 1, 0])
-  const d = t.distanceCm / 100 // м
+  const d = Math.min(6, Math.max(0.5, t.distanceCm / 100)) // м; кламп от runaway bbox (1/bboxH)
   // боковое смещение из центра bbox: доля кадра → метры по полю зрения на дистанции d
   const halfW = Math.tan(cam.fovY / 2) * cam.aspect * d
   const lateral = (t.bboxCx - 0.5) * 2 * halfW

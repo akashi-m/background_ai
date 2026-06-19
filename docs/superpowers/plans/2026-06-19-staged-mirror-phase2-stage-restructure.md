@@ -76,16 +76,17 @@ describe('activeStages — порядок и предикаты (сверено 
     }))).toEqual(['sceneBackground', 'compositeBase', 'bakedShadow', 'proxyShadow', 'blobContact', 'person', 'bloom', 'grainPresent'])
   })
 
-  it('MIRROR + shadowData present но personFloor null → фолбэк-силуэт (исправленный предикат)', () => {
+  it('MIRROR + shadowData present но personFloor null → фолбэк-силуэт + фигура', () => {
+    // person рисуется ВСЕГДА при mirrorVisible+person (compositor.ts:751, независимо от теней)
     expect(activeStages(frame(true, {
       person: PERSON, shadowData: SHADOW_BAKED, personFloor: null,
-    }))).toEqual(['sceneBackground', 'compositeBase', 'fallbackSilhouette', 'grainPresent'])
+    }))).toEqual(['sceneBackground', 'compositeBase', 'fallbackSilhouette', 'person', 'grainPresent'])
   })
 
-  it('MIRROR + нет shadowData + feetUV → фолбэк-силуэт + блоб', () => {
+  it('MIRROR + нет shadowData + feetUV → фолбэк-силуэт + блоб + фигура', () => {
     expect(activeStages(frame(true, {
       person: PERSON, shadowData: null, feetUV: FEET,
-    }))).toEqual(['sceneBackground', 'compositeBase', 'fallbackSilhouette', 'blobContact', 'grainPresent'])
+    }))).toEqual(['sceneBackground', 'compositeBase', 'fallbackSilhouette', 'blobContact', 'person', 'grainPresent'])
   })
 
   it('IDLE (mirror invisible) + slides + bloom on', () => {

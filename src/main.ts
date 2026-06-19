@@ -21,6 +21,7 @@ import { shadowFromBbox, SmoothedShadow } from './lux/shadow'
 import { personFloorWorld, sampleWorldXYZ, selectShadowMode, PoseSmoother } from './lux/shadowGeom'
 import { parseDevFlags } from './lux/devFlags'
 import { LuxUI, interiorLabels } from './lux/ui'
+import { runGolden } from './lux/golden'
 
 async function fetchJson(url: string): Promise<unknown> {
   const res = await fetch(url)
@@ -34,7 +35,7 @@ async function start() {
   const calibration = loadCalibration()
   let tracker: HeadTracker | null = null
   let videoLag: () => number = () => 0
-  if (!flags.noTracker) {
+  if (!flags.noTracker && !flags.golden) {
     const video = await openCamera() // HeadTracker-параллакс фона (v2)
     tracker = new HeadTracker(video, calibration)
     await tracker.init()
@@ -82,6 +83,13 @@ async function start() {
     ),
   )
   const switcher = new WorldSwitcher(worlds.length)
+
+  // Детерминированный golden-кадр для before/after скрин-диффа (изолировано, см. golden.ts).
+  // Возврат ДО живого цикла — на прод-путь не влияет.
+  if (flags.golden) {
+    await runGolden({ renderer, compositor, world: worlds[0], lut: luts[0] })
+    return
+  }
 
   // Lux: поток фигуры, опыт, слайдшоу, тень
   const person = new PersonStream(LUX_CONFIG.captureUrl)

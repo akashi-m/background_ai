@@ -3,7 +3,7 @@ import { parseDevFlags } from './devFlags'
 
 describe('parseDevFlags', () => {
   it('пустая строка → всё выключено', () => {
-    expect(parseDevFlags('')).toEqual({ noTracker: false, forcePhase: null })
+    expect(parseDevFlags('')).toEqual({ noTracker: false, forcePhase: null, golden: false })
   })
 
   it('?noTracker включает работу без камеры', () => {
@@ -18,6 +18,6 @@ describe('parseDevFlags', () => {
 
   it('комбинация', () => {
     const f = parseDevFlags('?noTracker&forcePhase=MIRROR')
-    expect(f).toEqual({ noTracker: true, forcePhase: 'MIRROR' })
+    expect(f).toEqual({ noTracker: true, forcePhase: 'MIRROR', golden: false })
   })
 })

@@ -6,6 +6,7 @@ import type { Phase } from './experience'
 export interface DevFlags {
   noTracker: boolean       // не открывать камеру/трекер (нейтральный взгляд)
   forcePhase: Phase | null // принудительная фаза на старте
+  golden: boolean          // детерминированный один кадр для before/after скрин-диффа (см. golden.ts)
 }
 
 const PHASES: readonly Phase[] = ['IDLE', 'APPROACH', 'MIRROR']
@@ -16,5 +17,6 @@ export function parseDevFlags(search: string): DevFlags {
   return {
     noTracker: q.has('noTracker'),
     forcePhase: PHASES.includes(raw as Phase) ? (raw as Phase) : null,
+    golden: q.has('golden'),
   }
 }

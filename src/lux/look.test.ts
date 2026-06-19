@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LOOK_DEFAULTS, resolveLook, loadLook, type ResolvedLook } from './look'
+import { LOOK_DEFAULTS, resolveLook, loadLook, type ResolvedLook, type FetchLike } from './look'
 import { LUX_CONFIG } from './config'
 import { makeMultiplyBlitMat, makeBakedShadowMat } from './multiplyBlit'
 
@@ -39,6 +39,15 @@ describe('resolveLook (deep-merge)', () => {
     const r: ResolvedLook = resolveLook(LOOK_DEFAULTS, { shadow: { strength: 0.7 } })
     expect(r.shadow.strength).toBe(0.7)
     expect(r.shadow.multiply.centerDark).toBe(LOOK_DEFAULTS.shadow.multiply.centerDark)
+  })
+
+  it('результат изолирован — мутация результата не портит дефолты', () => {
+    const r = resolveLook(LOOK_DEFAULTS, { grade: { contrast: 1.2 } })
+    expect(r.matte.feather).not.toBe(LOOK_DEFAULTS.matte.feather)        // не та же ссылка
+    r.matte.feather[0] = 999
+    r.shadow.multiply.tint[0] = 999
+    expect(LOOK_DEFAULTS.matte.feather[0]).toBe(0.4)                     // дефолт цел
+    expect(LOOK_DEFAULTS.shadow.multiply.tint[0]).toBe(0.40)
   })
 })
 
@@ -117,9 +126,7 @@ describe('LOOK_DEFAULTS привязаны к текущим источника�
   })
 })
 
-const okFetch = (body: unknown) =>
-  (async () => ({ ok: true, json: async () => body })) as unknown as
-    (url: string) => Promise<{ ok: boolean; json: () => Promise<unknown> }>
+const okFetch = (body: unknown): FetchLike => async () => ({ ok: true, json: async () => body })
 
 describe('loadLook', () => {
   it('валидный look.json → мёрж над дефолтами', async () => {
@@ -129,14 +136,12 @@ describe('loadLook', () => {
   })
 
   it('файла нет (ok:false) → чистые дефолты', async () => {
-    const f = (async () => ({ ok: false, json: async () => ({}) })) as unknown as
-      (url: string) => Promise<{ ok: boolean; json: () => Promise<unknown> }>
+    const f: FetchLike = async () => ({ ok: false, json: async () => ({}) })
     expect(await loadLook('x', f)).toEqual(LOOK_DEFAULTS)
   })
 
   it('сеть упала (throw) → чистые дефолты', async () => {
-    const f = (async () => { throw new Error('net') }) as unknown as
-      (url: string) => Promise<{ ok: boolean; json: () => Promise<unknown> }>
+    const f: FetchLike = async () => { throw new Error('net') }
     expect(await loadLook('x', f)).toEqual(LOOK_DEFAULTS)
   })
 
@@ -147,9 +152,14 @@ describe('loadLook', () => {
 
   it('запрашивает правильный URL мира', async () => {
     let seen = ''
-    const f = (async (u: string) => { seen = u; return { ok: true, json: async () => ({}) } }) as unknown as
-      (url: string) => Promise<{ ok: boolean; json: () => Promise<unknown> }>
+    const f: FetchLike = async (u: string) => { seen = u; return { ok: true, json: async () => ({}) } }
     await loadLook('bedroom', f)
     expect(seen).toBe('/assets/worlds/bedroom/look.json')
+  })
+
+  it('массив из JSON-оверрайда заменяется целиком', async () => {
+    const r = await loadLook('x', okFetch({ matte: { feather: [0.5, 0.9] } }))
+    expect(r.matte.feather).toEqual([0.5, 0.9])
+    expect(r.matte.erode).toBe(LOOK_DEFAULTS.matte.erode)
   })
 })

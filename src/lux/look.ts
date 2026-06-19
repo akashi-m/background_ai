@@ -101,7 +101,7 @@ function deepMerge<T>(base: T, override: unknown): T {
 }
 
 export function resolveLook(defaults: ResolvedLook, override: Look | null | undefined): ResolvedLook {
-  return deepMerge(defaults, override ?? {})
+  return structuredClone(deepMerge(defaults, override ?? {}))
 }
 
 export type FetchLike = (url: string) => Promise<{ ok: boolean; json: () => Promise<unknown> }>

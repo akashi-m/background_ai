@@ -46,7 +46,7 @@ export function stageEnabled(id: StageId, f: StageFrame): boolean {
     case 'proxyShadow': return shadowBase && !!o.shadowData && !!o.personFloor && PROXY_SHADOW_ENABLED && !!o.pose
     case 'fallbackSilhouette': return shadowBase && !(o.shadowData && o.personFloor)
     case 'blobContact': return shadowBase && !!o.feetUV
-    case 'person': return f.mirrorVisible && !!o.person && (!o.toggles.shadow || !!(o.shadowData && o.personFloor))
+    case 'person': return f.mirrorVisible && !!o.person
     case 'bloom': return o.toggles.bloom
     case 'grainPresent': return true
     case 'fadeCurtain': return o.fade > 0.001

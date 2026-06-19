@@ -135,7 +135,7 @@ shadow.lightsFile/worldPosFile). **Грейд + тон тени переезжа
   "geom":    { "anchorMode": "coverfit", "mirrorMag": 1.0,
                "photo25dHeightFudge": 1.0, "footAnchorRaise": 0.04, "heightTrust": 1.0 },
   "grade":   { "colorMatch": { "cast": 0.35, "exposure": 0.15 },
-               "contrast": 1.08, "temp": 0.02, "saturation": 1.0, "shade": 0.18 },
+               "contrast": 1.08, "temp": 0.02, "saturation": 1.0, "shade": 0.18, "wrapStrength": 0.85 },
   "shadow":  {
     "strength": 0.5,
     "baked":  { "feetUV": [0.233, 0.161], "raise": 0.05 },

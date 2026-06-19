@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LOOK_DEFAULTS, resolveLook, type ResolvedLook } from './look'
+import { LOOK_DEFAULTS, resolveLook, loadLook, type ResolvedLook } from './look'
 import { LUX_CONFIG } from './config'
 import { makeMultiplyBlitMat, makeBakedShadowMat } from './multiplyBlit'
 
@@ -114,5 +114,42 @@ describe('LOOK_DEFAULTS привязаны к текущим источника�
     expect(LOOK_DEFAULTS.unify.lut).toBeNull()
     expect(LOOK_DEFAULTS.unify.lutStrength).toBe(1.0)
     expect(LOOK_DEFAULTS.unify.vignette).toBe(0.0)
+  })
+})
+
+const okFetch = (body: unknown) =>
+  (async () => ({ ok: true, json: async () => body })) as unknown as
+    (url: string) => Promise<{ ok: boolean; json: () => Promise<unknown> }>
+
+describe('loadLook', () => {
+  it('валидный look.json → мёрж над дефолтами', async () => {
+    const r = await loadLook('living', okFetch({ grade: { contrast: 1.3 } }))
+    expect(r.grade.contrast).toBe(1.3)
+    expect(r.grade.temp).toBe(LOOK_DEFAULTS.grade.temp)
+  })
+
+  it('файла нет (ok:false) → чистые дефолты', async () => {
+    const f = (async () => ({ ok: false, json: async () => ({}) })) as unknown as
+      (url: string) => Promise<{ ok: boolean; json: () => Promise<unknown> }>
+    expect(await loadLook('x', f)).toEqual(LOOK_DEFAULTS)
+  })
+
+  it('сеть упала (throw) → чистые дефолты', async () => {
+    const f = (async () => { throw new Error('net') }) as unknown as
+      (url: string) => Promise<{ ok: boolean; json: () => Promise<unknown> }>
+    expect(await loadLook('x', f)).toEqual(LOOK_DEFAULTS)
+  })
+
+  it('мусор вместо объекта → чистые дефолты', async () => {
+    expect(await loadLook('x', okFetch('не объект'))).toEqual(LOOK_DEFAULTS)
+    expect(await loadLook('x', okFetch(null))).toEqual(LOOK_DEFAULTS)
+  })
+
+  it('запрашивает правильный URL мира', async () => {
+    let seen = ''
+    const f = (async (u: string) => { seen = u; return { ok: true, json: async () => ({}) } }) as unknown as
+      (url: string) => Promise<{ ok: boolean; json: () => Promise<unknown> }>
+    await loadLook('bedroom', f)
+    expect(seen).toBe('/assets/worlds/bedroom/look.json')
   })
 })

@@ -103,3 +103,20 @@ function deepMerge<T>(base: T, override: unknown): T {
 export function resolveLook(defaults: ResolvedLook, override: Look | null | undefined): ResolvedLook {
   return deepMerge(defaults, override ?? {})
 }
+
+export type FetchLike = (url: string) => Promise<{ ok: boolean; json: () => Promise<unknown> }>
+
+// Загрузка пер-мирового look.json. Толерантна: нет файла / сеть упала / мусор → чистые дефолты.
+export async function loadLook(
+  worldName: string,
+  fetchFn: FetchLike = fetch as unknown as FetchLike,
+): Promise<ResolvedLook> {
+  try {
+    const res = await fetchFn(`/assets/worlds/${worldName}/look.json`)
+    if (!res.ok) return resolveLook(LOOK_DEFAULTS, null)
+    const json = (await res.json()) as unknown
+    return resolveLook(LOOK_DEFAULTS, isPlainObject(json) ? (json as Look) : null)
+  } catch {
+    return resolveLook(LOOK_DEFAULTS, null)
+  }
+}

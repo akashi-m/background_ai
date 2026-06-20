@@ -110,23 +110,60 @@ async function start() {
   const ui = new LuxUI((i) => switcher.switchTo(i))
   ui.setWorlds(interiorLabels(worlds.map((w) => w.meta)))
 
+  // Мелкий хелпер: мутирует obj по dotted-path (a.b.c)
+  function setPath(obj: Record<string, unknown>, path: string, value: unknown): void {
+    const parts = path.split('.')
+    let cur: Record<string, unknown> = obj
+    for (let i = 0; i < parts.length - 1; i++) {
+      cur = cur[parts[i]] as Record<string, unknown>
+    }
+    cur[parts[parts.length - 1]] = value
+  }
+
+  // Извлечь значения слайдеров из ResolvedLook для reseed
+  function sliderValuesFromLook(look: (typeof worldLooks)[0]): Record<string, number> {
+    return {
+      wrapStrength:   look.grade.wrapStrength,
+      erode:          look.matte.erode,
+      grainAmount:    look.unify.grain,
+      bloom:          look.unify.bloom,
+      bloomThreshold: look.unify.bloomThreshold,
+      contrast:       look.grade.contrast,
+      temp:           look.grade.temp,
+      shade:          look.grade.shade,
+      cast:           look.grade.colorMatch.cast,
+      exposure:       look.grade.colorMatch.exposure,
+    }
+  }
+
+  const initialLook = worldLooks[0]
+
   // dev-панель реал-тайм тюна пост-обработки (тоггл G; скрыта по умолчанию)
   const devPanel = createDevPanel(
     [
-      { key: 'wrapStrength', label: 'light wrap', min: 0, max: 1, step: 0.01, value: LUX_CONFIG.wrapStrength },
-      { key: 'erode', label: 'erode (RVM)', min: 0, max: 0.01, step: 0.0005, value: LUX_CONFIG.erode },
-      { key: 'grainAmount', label: 'grain', min: 0, max: 0.15, step: 0.005, value: LUX_CONFIG.grainAmount },
-      { key: 'bloom', label: 'bloom', min: 0, max: 1.5, step: 0.05, value: LUX_CONFIG.bloom },
-      { key: 'bloomThreshold', label: 'bloom thr', min: 0.4, max: 1, step: 0.02, value: 0.72 },
-      { key: 'contrast', label: 'contrast', min: 0.8, max: 1.4, step: 0.01, value: LUX_CONFIG.contrast },
-      { key: 'temp', label: 'temp', min: -0.1, max: 0.1, step: 0.005, value: LUX_CONFIG.temp },
-      { key: 'shade', label: 'shade', min: 0, max: 0.5, step: 0.01, value: LUX_CONFIG.shadeAmount },
-      { key: 'cast', label: 'colorMatch cast', min: 0, max: 1, step: 0.01, value: LUX_CONFIG.colorMatch.cast },
-      { key: 'exposure', label: 'colorMatch exp', min: 0, max: 0.5, step: 0.01, value: LUX_CONFIG.colorMatch.exposure },
+      { key: 'wrapStrength', label: 'light wrap', min: 0, max: 1, step: 0.01, value: initialLook.grade.wrapStrength },
+      { key: 'erode', label: 'erode (RVM)', min: 0, max: 0.01, step: 0.0005, value: initialLook.matte.erode },
+      { key: 'grainAmount', label: 'grain', min: 0, max: 0.15, step: 0.005, value: initialLook.unify.grain },
+      { key: 'bloom', label: 'bloom', min: 0, max: 1.5, step: 0.05, value: initialLook.unify.bloom },
+      { key: 'bloomThreshold', label: 'bloom thr', min: 0.4, max: 1, step: 0.02, value: initialLook.unify.bloomThreshold },
+      { key: 'contrast', label: 'contrast', min: 0.8, max: 1.4, step: 0.01, value: initialLook.grade.contrast },
+      { key: 'temp', label: 'temp', min: -0.1, max: 0.1, step: 0.005, value: initialLook.grade.temp },
+      { key: 'shade', label: 'shade', min: 0, max: 0.5, step: 0.01, value: initialLook.grade.shade },
+      { key: 'cast', label: 'colorMatch cast', min: 0, max: 1, step: 0.01, value: initialLook.grade.colorMatch.cast },
+      { key: 'exposure', label: 'colorMatch exp', min: 0, max: 0.5, step: 0.01, value: initialLook.grade.colorMatch.exposure },
     ],
-    // Task 1: setTuning удалён (роль ушла в look). Колбэк — no-op заглушка;
-    // Task 2 переключит панель на правку look активного мира + Save look.json.
-    (_key, _value) => { /* no-op until Task 2 wires dev-panel → look */ },
+    // setLookValue: мутирует worldLooks[active] по dotted look-path
+    (path: string, value: number) => {
+      setPath(worldLooks[switcher.index] as unknown as Record<string, unknown>, path, value)
+    },
+    // onSave: POST активный look на Vite dev-эндпоинт /__look/:world
+    () => {
+      const worldName = SCENE_CONFIG.worlds[switcher.index]
+      fetch(`/__look/${worldName}`, {
+        method: 'POST',
+        body: JSON.stringify(worldLooks[switcher.index]),
+      }).catch((e) => console.warn('look save failed:', e))
+    },
   )
 
   new AlignController(() => worlds[switcher.index], () => SCENE_CONFIG.worlds[switcher.index])
@@ -177,10 +214,16 @@ async function start() {
   const poseSmoother = new PoseSmoother()
 
   let last = performance.now()
+  let prevSwitcherIndex = switcher.index
   renderer.setAnimationLoop((now) => {
     const dt = Math.min((now - last) / 1000, 0.1)
     last = now
     switcher.update(dt)
+    // при смене мира — пересидировать слайдеры из нового worldLook
+    if (switcher.index !== prevSwitcherIndex) {
+      prevSwitcherIndex = switcher.index
+      devPanel.reseed(sliderValuesFromLook(worldLooks[switcher.index]))
+    }
     person.tick()
 
     // здоровье потока для опыта: live + телеметрия свежа

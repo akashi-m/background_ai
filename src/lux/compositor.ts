@@ -475,8 +475,8 @@ export class LuxCompositor {
             ? lifted
             : uHighlightKnee + (lifted - uHighlightKnee) * 0.5; // мягкий roll-off пересветов
           float ratio = l > 1e-3 ? tamed / l : 1.0;
-          vec3 flat = clamp(c * ratio, 0.0, 1.0);
-          fragColor = vec4(mix(c, flat, uStrength), src.a);   // сила; альфа сохранена
+          vec3 outRgb = clamp(c * ratio, 0.0, 1.0);            // ('flat' — зарезерв. слово GLSL3!)
+          fragColor = vec4(mix(c, outRgb, uStrength), src.a);  // сила; альфа сохранена
         }
       `,
       depthTest: false,

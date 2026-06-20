@@ -57,7 +57,7 @@ export interface RenderOpts {
   mirrorOpacity: number
   shadow: ShadowEllipse | null
   shadowStrength: number
-  shadowData: { lamps: { pos: [number, number, number]; weight: number }[]; worldPos: THREE.Texture; floorZ: number; camera: ShadowCamera; bakedShadow?: THREE.Texture | null } | null
+  shadowData: { lamps: { pos: [number, number, number]; weight: number }[]; worldPos: THREE.Texture | null; floorZ: number; camera: ShadowCamera; bakedShadow?: THREE.Texture | null } | null
   personFloor: { F: [number, number, number]; H: number } | null
   pose: { world: number[][]; healthy: number } | null
   feetUV: { u: number; v: number; halfW: number } | null

@@ -260,11 +260,12 @@ async function start() {
       const [bx0, , bx1, by1] = t.bbox
       feetUV = { u: 1 - (bx0 + bx1) / 2, v: 1 - by1, halfW: (bx1 - bx0) / 2 }
     }
-    if (sd && healthy && t?.bbox && t.distanceCm != null) {
+    if (sd && healthy && t?.bbox && t.distanceCm != null && sd.worldPosData != null) {
       const [x0, y0, x1, y1] = t.bbox
       // рост — из телеметрии (bbox+дистанция); F — якорь к экранным ступням:
       // worldPos-EXR = обратная проекция камеры-плейта, сэмплим точку пола под
       // ступнями (X зеркалится как у фигуры, низ bbox = y1 → texture v = 1-y1).
+      // Для миров без worldPosData (lobby, flat без EXR) — Task 4 добавит аналитический F.
       const H = personFloorWorld(
         { distanceCm: t.distanceCm, bboxCx: 1 - (x0 + x1) / 2, bboxH: y1 - y0 },
         sd.camera, sd.floorZ,

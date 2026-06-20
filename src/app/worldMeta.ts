@@ -19,7 +19,7 @@ export interface WorldMeta {
   shadowStrength: number // плотность контактной тени 0..1 (Lux, дефолт 0.5)
   flat?: boolean         // плоский плейт-фон зеркала: фото целиком, без параллакс-кропа
   lightDirX?: number     // направление ключевого света интерьера по X экрана: -1 слева, +1 справа, 0 сверху
-  shadow?: { lightsFile: string; worldPosFile: string } // физическая тень (Lux): лампы+камера + карта world-position
+  shadow?: { lightsFile: string; worldPosFile?: string } // физическая тень (Lux): лампы+камера + карта world-position (worldPosFile опционален для flat-миров)
 }
 
 const DEFAULT_TRANSFORM: WorldTransform = { position: [0, 0, 0], rotationYDeg: 0, scale: 1 }
@@ -37,7 +37,9 @@ export function parseWorldMeta(json: unknown, worldName: string): WorldMeta {
   if (typeof j.file !== 'string' || !j.file) fail(worldName, 'нет file')
 
   if (j.format === 'photo25d') {
-    if (typeof j.depthFile !== 'string' || !j.depthFile) fail(worldName, 'photo25d требует depthFile')
+    // flat-миры (плоский плейт, depthAmountCm=0) не нуждаются в depth-карте
+    const isFlat = j.flat === true
+    if (!isFlat && (typeof j.depthFile !== 'string' || !j.depthFile)) fail(worldName, 'photo25d требует depthFile (или flat:true)')
     if (typeof j.aspect !== 'number' || !isFinite(j.aspect) || j.aspect <= 0) fail(worldName, 'photo25d требует aspect > 0')
   }
 
@@ -83,8 +85,11 @@ export function parseWorldMeta(json: unknown, worldName: string): WorldMeta {
   let shadow: WorldMeta['shadow']
   if (j.shadow && typeof j.shadow === 'object' && !Array.isArray(j.shadow)) {
     const s = j.shadow as Record<string, unknown>
-    if (typeof s.lightsFile === 'string' && typeof s.worldPosFile === 'string') {
-      shadow = { lightsFile: s.lightsFile, worldPosFile: s.worldPosFile }
+    if (typeof s.lightsFile === 'string') {
+      shadow = {
+        lightsFile: s.lightsFile,
+        ...(typeof s.worldPosFile === 'string' ? { worldPosFile: s.worldPosFile } : {}),
+      }
     }
   }
 

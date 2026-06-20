@@ -23,9 +23,11 @@ export interface BuiltWorld {
     lamps: { pos: [number, number, number]; weight: number }[]
     camera: import('../lux/shadowGeom').ShadowCamera
     floorZ: number
-    worldPos: THREE.Texture
+    // null если мир не имеет worldPosFile (flat-миры без EXR — аналитический floor-point вместо сэмпла)
+    worldPos: THREE.Texture | null
     // те же мировые XYZ на CPU (Float32) — для сэмпла точки пола под ступнями (якорь тени)
-    worldPosData: { data: Float32Array; width: number; height: number }
+    // null если мир не имеет worldPosFile (flat/lobby)
+    worldPosData: { data: Float32Array; width: number; height: number } | null
     // Фаза 1: запечённая Blender-тень (shadow-catcher, альфа = покрытие тенью). Опционально.
     bakedShadow?: THREE.Texture
   }
@@ -92,9 +94,11 @@ export async function buildWorld(
     const zCm = flat ? 0 : -60
     const depthAmountCm = flat ? 0 : (loadDepthOverride(name) ?? meta.depthAmountCm ?? 60)
     const fit = fitCoverCm(meta.aspect!, zCm, screenWcm, screenHcm, flat ? 1.0 : 1.35)
+    // flat-миры без depthFile: depth-карта не нужна (depthAmountCm=0), используем фото как заглушку
+    const depthUrl = meta.depthFile ? baseUrl + meta.depthFile : baseUrl + meta.file
     const mesh = await makeDepthPhotoMesh({
       photoUrl: baseUrl + meta.file,
-      depthUrl: baseUrl + meta.depthFile!,
+      depthUrl,
       widthCm: fit.widthCm,
       heightCm: fit.heightCm,
       zCm,
@@ -110,7 +114,7 @@ export async function buildWorld(
     // flat: фон рисуется фуллскрин-блитом (без 3D-камеры/глаза → без зума)
     if (flat) built.backplate = mat.uniforms.uMap.value as THREE.Texture
 
-    // физическая тень (Lux): лампы/камера из lights.json + карта world-position (EXR)
+    // физическая тень (Lux): лампы/камера из lights.json + карта world-position (EXR, опц.)
     if (meta.shadow) {
       try {
         const res = await fetch(baseUrl + meta.shadow.lightsFile)
@@ -119,10 +123,17 @@ export async function buildWorld(
         const lamps = lights.lamps as { pos: [number, number, number]; weight: number }[]
         const wsum = lamps.reduce((s, l) => s + l.weight, 0) || 1
         lamps.forEach((l) => { l.weight = l.weight / wsum })
-        const worldPos = await new EXRLoader().setDataType(THREE.FloatType).loadAsync(baseUrl + meta.shadow.worldPosFile)
-        worldPos.minFilter = THREE.NearestFilter
-        worldPos.magFilter = THREE.NearestFilter
-        const img = worldPos.image as { data: Float32Array; width: number; height: number }
+        // worldPos EXR опционален: грузим только если worldPosFile задан в meta.shadow
+        let worldPos: THREE.Texture | null = null
+        let worldPosData: { data: Float32Array; width: number; height: number } | null = null
+        if (meta.shadow.worldPosFile) {
+          const exr = await new EXRLoader().setDataType(THREE.FloatType).loadAsync(baseUrl + meta.shadow.worldPosFile)
+          exr.minFilter = THREE.NearestFilter
+          exr.magFilter = THREE.NearestFilter
+          const img = exr.image as { data: Float32Array; width: number; height: number }
+          worldPos = exr
+          worldPosData = { data: img.data, width: img.width, height: img.height }
+        }
         // Фаза 1: запечённая Blender-тень (опц.) — грузим shadow_baked.png, если есть.
         let bakedShadow: THREE.Texture | undefined
         try {
@@ -135,7 +146,7 @@ export async function buildWorld(
           camera: lights.camera,
           floorZ: lights.floorZ,
           worldPos,
-          worldPosData: { data: img.data, width: img.width, height: img.height },
+          worldPosData,
           bakedShadow,
         }
       } catch (e) {

@@ -4,13 +4,13 @@
 export type StageId =
   | 'sceneBackground' | 'compositeBase' | 'idleSlides'
   | 'bakedShadow' | 'proxyShadow' | 'fallbackSilhouette' | 'blobContact'
-  | 'person' | 'unifyLut' | 'bloom' | 'grainPresent' | 'fadeCurtain'
+  | 'deshadow' | 'person' | 'unifyLut' | 'bloom' | 'grainPresent' | 'fadeCurtain'
 
 // Канонический порядок исполнения (строгий). fadeCurtain — опц. эпилог.
 export const STAGE_ORDER: StageId[] = [
   'sceneBackground', 'compositeBase', 'idleSlides',
   'bakedShadow', 'proxyShadow', 'fallbackSilhouette', 'blobContact',
-  'person', 'unifyLut', 'bloom', 'grainPresent', 'fadeCurtain',
+  'deshadow', 'person', 'unifyLut', 'bloom', 'grainPresent', 'fadeCurtain',
 ]
 
 // Фича-флаг прокси-тени (перенесён сюда из compositor.ts как pipeline-config).
@@ -26,6 +26,7 @@ export interface StageInputs {
   feetUV: unknown | null
   slides: { visible: number; a: unknown | null }
   fade: number
+  deshadowMode: 'off' | 'lite' | 'relight'
 }
 
 export interface StageFrame {
@@ -46,6 +47,7 @@ export function stageEnabled(id: StageId, f: StageFrame): boolean {
     case 'proxyShadow': return shadowBase && !!o.shadowData && !!o.personFloor && PROXY_SHADOW_ENABLED && !!o.pose
     case 'fallbackSilhouette': return shadowBase && !(o.shadowData && o.personFloor)
     case 'blobContact': return shadowBase && !!o.feetUV
+    case 'deshadow': return f.mirrorVisible && !!o.person && o.deshadowMode !== 'off'
     case 'person': return f.mirrorVisible && !!o.person
     case 'unifyLut': return f.mirrorVisible && o.toggles.lut
     case 'bloom': return o.toggles.bloom

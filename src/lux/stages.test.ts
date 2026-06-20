@@ -7,6 +7,7 @@ function inputs(over: Partial<StageInputs>): StageInputs {
     toggles: { shadow: true, bloom: false, lut: true },
     person: null, shadowData: null, personFloor: null, pose: null, feetUV: null,
     slides: { visible: 0, a: null }, fade: 0,
+    deshadowMode: 'off',
     ...over,
   }
 }
@@ -22,10 +23,10 @@ const POSE = { world: [], healthy: 1 }
 const FEET = { u: 0.5, v: 0.1, halfW: 0.1 }
 
 describe('activeStages — порядок и предикаты (сверено с render())', () => {
-  it('STAGE_ORDER — канонический порядок из 12 стадий', () => {
+  it('STAGE_ORDER — канонический порядок из 13 стадий', () => {
     expect(STAGE_ORDER).toEqual([
       'sceneBackground', 'compositeBase', 'idleSlides', 'bakedShadow', 'proxyShadow',
-      'fallbackSilhouette', 'blobContact', 'person', 'unifyLut', 'bloom', 'grainPresent', 'fadeCurtain',
+      'fallbackSilhouette', 'blobContact', 'deshadow', 'person', 'unifyLut', 'bloom', 'grainPresent', 'fadeCurtain',
     ])
   })
 
@@ -77,5 +78,11 @@ describe('activeStages — порядок и предикаты (сверено 
     expect(activeStages(frame(true, {
       toggles: { shadow: true, bloom: false, lut: false }, person: PERSON,
     }))).toEqual(['sceneBackground', 'compositeBase', 'fallbackSilhouette', 'person', 'grainPresent'])
+  })
+
+  it('MIRROR + person + deshadowMode=lite → deshadow перед person', () => {
+    expect(activeStages(frame(true, {
+      person: PERSON, deshadowMode: 'lite',
+    }))).toEqual(['sceneBackground', 'compositeBase', 'fallbackSilhouette', 'deshadow', 'person', 'unifyLut', 'grainPresent'])
   })
 })

@@ -19,6 +19,7 @@ import { IdleSlides } from './lux/idle'
 import { loadLutTexture } from './lux/lut'
 import { shadowFromBbox, SmoothedShadow } from './lux/shadow'
 import { personFloorWorld, sampleWorldXYZ, selectShadowMode, PoseSmoother } from './lux/shadowGeom'
+import { floorPointAnalytic, heightLockScale } from './lux/mirrorGeom'
 import { parseDevFlags } from './lux/devFlags'
 import { LuxUI, interiorLabels } from './lux/ui'
 import { runGolden } from './lux/golden'
@@ -212,6 +213,8 @@ async function start() {
   let smoothF: [number, number, number] | null = null
   let smoothH = 1.7
   const poseSmoother = new PoseSmoother()
+  // height-lock 1:1 (anchorMode='height'): сглаженный общий масштаб фигуры+тени (EWMA)
+  let smoothScale: { sx: number; sy: number } | null = null
 
   let last = performance.now()
   let prevSwitcherIndex = switcher.index
@@ -260,17 +263,20 @@ async function start() {
       const [bx0, , bx1, by1] = t.bbox
       feetUV = { u: 1 - (bx0 + bx1) / 2, v: 1 - by1, halfW: (bx1 - bx0) / 2 }
     }
-    if (sd && healthy && t?.bbox && t.distanceCm != null && sd.worldPosData != null) {
+    if (sd && healthy && t?.bbox && t.distanceCm != null) {
       const [x0, y0, x1, y1] = t.bbox
       // рост — из телеметрии (bbox+дистанция); F — якорь к экранным ступням:
       // worldPos-EXR = обратная проекция камеры-плейта, сэмплим точку пола под
       // ступнями (X зеркалится как у фигуры, низ bbox = y1 → texture v = 1-y1).
-      // Для миров без worldPosData (lobby, flat без EXR) — Task 4 добавит аналитический F.
       const H = personFloorWorld(
         { distanceCm: t.distanceCm, bboxCx: 1 - (x0 + x1) / 2, bboxH: y1 - y0 },
         sd.camera, sd.floorZ,
       ).H
-      const F = sampleWorldXYZ(sd.worldPosData, 1 - (x0 + x1) / 2, 1 - y1)
+      // F: EXR-сэмпл когда worldPosData есть (living/etc.); иначе аналитический луч
+      // камеры → пол Z=floorZ (lobby, flat без EXR) — тот же mirror-U / низ-bbox-V.
+      const F = sd.worldPosData != null
+        ? sampleWorldXYZ(sd.worldPosData, 1 - (x0 + x1) / 2, 1 - y1)
+        : floorPointAnalytic(sd.camera, 1 - (x0 + x1) / 2, 1 - y1, sd.floorZ)
       const k = 1 - Math.exp(-dt * 8)
       smoothF = smoothF
         ? [smoothF[0] + (F[0] - smoothF[0]) * k, smoothF[1] + (F[1] - smoothF[1]) * k, smoothF[2] + (F[2] - smoothF[2]) * k]
@@ -281,6 +287,31 @@ async function start() {
       smoothF = null
     }
 
+    // height-lock 1:1: при anchorMode='height' (+ есть рост H и bbox) считаем единый
+    // масштаб фигуры+тени так, чтобы аватар читался в натуральный рост; иначе cover-fit.
+    const look0 = worldLooks[switcher.index]
+    let scaleOverride: { sx: number; sy: number } | undefined
+    if (look0.geom.anchorMode === 'height' && personFloor && t?.bbox) {
+      const [, sy0, , sy1] = t.bbox
+      const target = heightLockScale({
+        H_m: smoothH,
+        bboxHfrac: sy1 - sy0,
+        canvasHeightPx: Math.floor(innerHeight * renderer.getPixelRatio()),
+        screenHcm: calibration.screenHcm,
+        mirrorMag: look0.geom.mirrorMag,
+        personAspect: person.videoAspect ?? 1,
+        canvasAspect: innerWidth / innerHeight,
+      })
+      const ks = 1 - Math.exp(-dt * 4)
+      smoothScale = smoothScale
+        ? { sx: smoothScale.sx + (target.sx - smoothScale.sx) * ks, sy: smoothScale.sy + (target.sy - smoothScale.sy) * ks }
+        : target
+      scaleOverride = smoothScale
+    } else {
+      smoothScale = null
+      scaleOverride = undefined
+    }
+
     compositor.render({
       scene: active.scene,
       camera,
@@ -288,6 +319,7 @@ async function start() {
       backplateAspect: active.meta.aspect ?? null,
       person: person.texture,
       personAspect: person.videoAspect,
+      scaleOverride,
       lightDirX: active.meta.lightDirX ?? 0,
       mirrorOpacity: experience.mirrorOpacity,
       shadow,

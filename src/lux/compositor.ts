@@ -268,6 +268,7 @@ export class LuxCompositor {
         uContrast: { value: 1.08 }, // контраст вокруг средне-серого
         uTemp: { value: 0.02 },         // температура: тёплый(+)/холодный(−)
         uShade: { value: 0.18 },
+        uGain: { value: 1 }, // яркость фигуры (множитель RGB): <1 темнее, >1 ярче
         uShadeDirX: { value: 0 },
         uLutOn: { value: 1 },
         uWrapOn: { value: 1 },
@@ -284,7 +285,7 @@ export class LuxCompositor {
         uniform vec2 uFeather; uniform float uErode; uniform float uWrapStrength;
         uniform float uCast; uniform float uExp;
         uniform float uContrast; uniform float uTemp;
-        uniform float uShade; uniform float uShadeDirX;
+        uniform float uShade; uniform float uShadeDirX; uniform float uGain;
         uniform float uLutOn; uniform float uWrapOn;
         uniform float uColorMatchOn;
         out vec4 fragColor;
@@ -339,6 +340,9 @@ export class LuxCompositor {
           // uShadeDirX: +1 свет слева (левый край ярче), -1 свет справа
           float lit = 1.0 + uShade * (0.5 - vUv.x) * 2.0 * uShadeDirX;
           rgb = clamp(rgb * lit, 0.0, 1.0);
+
+          // яркость фигуры: общий множитель (uGain=1 → no-op), <1 приглушает «слишком яркого» человека
+          rgb = clamp(rgb * uGain, 0.0, 1.0);
 
           // light wrap: фон «обнимает» контур (максимум на полупрозрачном крае)
           if (uWrapOn > 0.5) {
@@ -500,6 +504,7 @@ export class LuxCompositor {
     p.uContrast.value = g.contrast
     p.uTemp.value = g.temp
     p.uShade.value = g.shade
+    p.uGain.value = g.gain
     this.grainMat.uniforms.uGrain.value = look.unify.grain
     this.grainMat.uniforms.uBloom.value = look.unify.bloom
     this.bloomBrightMat.uniforms.uThreshold.value = look.unify.bloomThreshold

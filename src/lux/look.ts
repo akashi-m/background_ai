@@ -14,7 +14,7 @@ export interface GeomLook {
 }
 export interface GradeLook {
   colorMatch: ColorMatchLook
-  contrast: number; temp: number; saturation: number; shade: number; wrapStrength: number
+  contrast: number; temp: number; saturation: number; shade: number; wrapStrength: number; gain: number
 }
 export interface ShadowBakedLook { feetUV: [number, number]; raise: number }
 export interface ShadowProxyLook {
@@ -68,7 +68,7 @@ export const LOOK_DEFAULTS: ResolvedLook = {
   geom: { anchorMode: 'coverfit', mirrorMag: 1.0, photo25dHeightFudge: 1.0, footAnchorRaise: 0.04, heightTrust: 1.0 },
   grade: {
     colorMatch: { cast: 0.35, exposure: 0.15 },
-    contrast: 1.08, temp: 0.02, saturation: 1.0, shade: 0.18, wrapStrength: 0.85,
+    contrast: 1.08, temp: 0.02, saturation: 1.0, shade: 0.18, wrapStrength: 0.85, gain: 1.0,
   },
   shadow: {
     strength: 0.5,

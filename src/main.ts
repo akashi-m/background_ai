@@ -132,6 +132,7 @@ async function start() {
       contrast:       look.grade.contrast,
       temp:           look.grade.temp,
       shade:          look.grade.shade,
+      gain:           look.grade.gain,
       cast:           look.grade.colorMatch.cast,
       exposure:       look.grade.colorMatch.exposure,
     }
@@ -150,6 +151,7 @@ async function start() {
       { key: 'contrast', label: 'contrast', min: 0.8, max: 1.4, step: 0.01, value: initialLook.grade.contrast },
       { key: 'temp', label: 'temp', min: -0.1, max: 0.1, step: 0.005, value: initialLook.grade.temp },
       { key: 'shade', label: 'shade', min: 0, max: 0.5, step: 0.01, value: initialLook.grade.shade },
+      { key: 'gain', label: 'person brightness', min: 0.3, max: 1.5, step: 0.01, value: initialLook.grade.gain },
       { key: 'cast', label: 'colorMatch cast', min: 0, max: 1, step: 0.01, value: initialLook.grade.colorMatch.cast },
       { key: 'exposure', label: 'colorMatch exp', min: 0, max: 0.5, step: 0.01, value: initialLook.grade.colorMatch.exposure },
     ],

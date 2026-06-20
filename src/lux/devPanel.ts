@@ -11,6 +11,7 @@ const SLIDER_LOOK_PATH: Record<string, string> = {
   contrast:       'grade.contrast',
   temp:           'grade.temp',
   shade:          'grade.shade',
+  gain:           'grade.gain',
   cast:           'grade.colorMatch.cast',
   exposure:       'grade.colorMatch.exposure',
 }

@@ -1,0 +1,13 @@
+{
+  "title": "Лобби",
+  "format": "photo25d",
+  "file": "photo.png",
+  "aspect": 0.5625,
+  "flat": true,
+  "dollyMaxCm": 0,
+  "depthAmountCm": 0,
+  "shadowStrength": 0.6,
+  "lightDirX": 0,
+  "shadow": { "lightsFile": "lights.json" },
+  "source": "3ds Max Corona 50mm"
+}

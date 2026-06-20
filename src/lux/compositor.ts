@@ -81,6 +81,7 @@ export class LuxCompositor {
   private compositeRT: THREE.WebGLRenderTarget // весь композит до зерна
   private shadowRT: THREE.WebGLRenderTarget // целевой RT физической тени (read+write split)
   private shadowRT2: THREE.WebGLRenderTarget // temp для multiply-blit read+write split (B1.9)
+  private personA: THREE.WebGLRenderTarget // de-shadow пре-пасс: тон-выровненная копия SBS-человека
   private ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
   private passScene = new THREE.Scene()
   private passMeshes = new Map<THREE.Material, THREE.Mesh>() // кэш — без аллокаций в кадре
@@ -98,6 +99,7 @@ export class LuxCompositor {
   private blobMat: THREE.ShaderMaterial // контактная «тень-капля», приклеена к ступням
   private multiplyBlitMat: THREE.ShaderMaterial // multiply-blit physical-тени (B1.9 wiring)
   private bakedShadowMat: THREE.ShaderMaterial // Фаза 1: запечённая Blender-база
+  private deshadowMat: THREE.ShaderMaterial // слот S3: тон-выравнивание SBS-RGB → personA
   private fadeMat: THREE.MeshBasicMaterial
   private shadowScene3D: ShadowScene3D | null = null // B1: реальный 3D-рендер прокси-тени (lazy)
 
@@ -113,6 +115,7 @@ export class LuxCompositor {
     this.compositeRT = new THREE.WebGLRenderTarget(width, height)
     this.shadowRT = new THREE.WebGLRenderTarget(width, height)
     this.shadowRT2 = new THREE.WebGLRenderTarget(width, height)
+    this.personA = new THREE.WebGLRenderTarget(width, height)
 
     this.blitMat = new THREE.ShaderMaterial({
       uniforms: { tSrc: { value: null } },
@@ -449,6 +452,36 @@ export class LuxCompositor {
     this.multiplyBlitMat.uniforms.uShadowFloorK.value = LUX_CONFIG.shadow.shadowFloorK
     this.bakedShadowMat = makeBakedShadowMat()
 
+    this.deshadowMat = new THREE.ShaderMaterial({
+      glslVersion: THREE.GLSL3,
+      uniforms: {
+        tVideo: { value: null }, uStrength: { value: 0.5 },
+        uShadowLift: { value: 0.1 }, uHighlightKnee: { value: 0.8 },
+      },
+      vertexShader: VERT3,
+      fragmentShader: /* glsl */ `
+        precision highp float;
+        in vec2 vUv;
+        uniform sampler2D tVideo;
+        uniform float uStrength; uniform float uShadowLift; uniform float uHighlightKnee;
+        out vec4 fragColor;
+        void main() {
+          vec4 src = texture(tVideo, vUv);
+          if (vUv.x >= 0.5) { fragColor = src; return; }   // альфа-половина SBS — без изменений
+          vec3 c = src.rgb;
+          float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+          float lifted = l + uShadowLift * (1.0 - l);        // открыть тени
+          float tamed = lifted < uHighlightKnee
+            ? lifted
+            : uHighlightKnee + (lifted - uHighlightKnee) * 0.5; // мягкий roll-off пересветов
+          float ratio = l > 1e-3 ? tamed / l : 1.0;
+          vec3 flat = clamp(c * ratio, 0.0, 1.0);
+          fragColor = vec4(mix(c, flat, uStrength), src.a);   // сила; альфа сохранена
+        }
+      `,
+      depthTest: false,
+    })
+
     this.fadeMat = new THREE.MeshBasicMaterial({
       color: 0x000000, transparent: true, opacity: 0, depthTest: false,
     })
@@ -483,6 +516,7 @@ export class LuxCompositor {
     this.compositeRT.setSize(width, height)
     this.shadowRT.setSize(width, height)
     this.shadowRT2.setSize(width, height)
+    this.personA.setSize(width, height)
   }
 
   private pass(mat: THREE.Material, target: THREE.WebGLRenderTarget | null): void {
@@ -524,6 +558,7 @@ export class LuxCompositor {
         toggles: { shadow: opts.toggles.shadow, bloom: opts.toggles.bloom, lut: opts.toggles.lut },
         person: opts.person, shadowData: opts.shadowData, personFloor: opts.personFloor,
         pose: opts.pose, feetUV: opts.feetUV, slides: opts.slides, fade: opts.fade,
+        deshadowMode: opts.look.deshadow.mode,
       } as StageInputs,
       mirrorVisible, sx, sy,
     }
@@ -696,10 +731,21 @@ export class LuxCompositor {
         break
       }
 
+      case 'deshadow': {
+        // S3 пре-пасс: тон-выровненная копия SBS-человека → personA
+        const d = this.deshadowMat.uniforms
+        d.tVideo.value = opts.person
+        d.uStrength.value = opts.look.deshadow.strength
+        d.uShadowLift.value = opts.look.deshadow.shadowLift
+        d.uHighlightKnee.value = opts.look.deshadow.highlightKnee
+        this.pass(this.deshadowMat, this.personA)
+        break
+      }
+
       case 'person': {
         // 5. фигура
         const u = this.personMat.uniforms
-        u.tVideo.value = opts.person
+        u.tVideo.value = opts.look.deshadow.mode !== 'off' ? this.personA.texture : opts.person
         u.tLut.value = opts.lut
         u.uLutSize.value = opts.lutSize
         u.tWrap.value = this.wrapRT_A.texture

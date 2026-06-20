@@ -92,6 +92,7 @@ export class LuxCompositor {
   private coverMat: THREE.ShaderMaterial // flat-фон: cover-fit плейт без 3D-камеры
   private slideMat: THREE.ShaderMaterial
   private personMat: THREE.ShaderMaterial
+  private unifyMat: THREE.ShaderMaterial // whole-frame LUT: грейд всего кадра одной текстурой
   private groundShadowMat: THREE.ShaderMaterial // силуэтная контактная тень у ног
   private blobMat: THREE.ShaderMaterial // контактная «тень-капля», приклеена к ступням
   private multiplyBlitMat: THREE.ShaderMaterial // multiply-blit physical-тени (B1.9 wiring)
@@ -350,6 +351,32 @@ export class LuxCompositor {
       `,
     })
 
+    // unifyMat: интерьерный 3D-LUT на ВЕСЬ кадр (комната+тень+человек) одной текстурой.
+    // Та же LUT-математика, что и в personMat-блоке, но whole-frame + сила uLutStrength.
+    this.unifyMat = new THREE.ShaderMaterial({
+      glslVersion: THREE.GLSL3,
+      uniforms: {
+        tSrc: { value: null }, tLut: { value: null },
+        uLutSize: { value: 16 }, uLutStrength: { value: 1 },
+      },
+      vertexShader: VERT3,
+      fragmentShader: /* glsl */ `
+        precision highp float;
+        precision highp sampler3D;
+        in vec2 vUv;
+        uniform sampler2D tSrc; uniform sampler3D tLut;
+        uniform float uLutSize; uniform float uLutStrength;
+        out vec4 fragColor;
+        void main() {
+          vec3 c = clamp(texture(tSrc, vUv).rgb, 0.0, 1.0);
+          vec3 lutUv = c * (uLutSize - 1.0) / uLutSize + 0.5 / uLutSize;
+          vec3 graded = texture(tLut, lutUv).rgb;
+          fragColor = vec4(mix(c, graded, uLutStrength), 1.0);
+        }
+      `,
+      depthTest: false,
+    })
+
     // Силуэтная контактная тень: тот же cover-fit/флип, что у фигуры, но силуэт
     // СДВИНУТ вниз по экрану (uDrop) и размыт. Рисуется ПЕРЕД фигурой → везде,
     // кроме зоны под ступнями, тень закрыта непрозрачной фигурой → мягкое
@@ -490,7 +517,7 @@ export class LuxCompositor {
 
     const f: StageFrame = {
       opts: {
-        toggles: { shadow: opts.toggles.shadow, bloom: opts.toggles.bloom },
+        toggles: { shadow: opts.toggles.shadow, bloom: opts.toggles.bloom, lut: opts.toggles.lut },
         person: opts.person, shadowData: opts.shadowData, personFloor: opts.personFloor,
         pose: opts.pose, feetUV: opts.feetUV, slides: opts.slides, fade: opts.fade,
       } as StageInputs,
@@ -674,12 +701,27 @@ export class LuxCompositor {
         u.tWrap.value = this.wrapRT_A.texture
         u.tMean.value = this.meanRT.texture
         u.uOpacity.value = opts.mirrorOpacity
-        u.uLutOn.value = opts.toggles.lut ? 1 : 0
+        u.uLutOn.value = 0 // LUT теперь whole-frame (стадия unifyLut), не на person
         u.uWrapOn.value = opts.toggles.wrap ? 1 : 0
         u.uColorMatchOn.value = opts.toggles.colorMatch ? 1 : 0
         u.uShadeDirX.value = -opts.lightDirX // ключ слева (dirX<0) → левый бок ярче
         u.uUvScale.value.set(sx, sy)
         this.pass(this.personMat, this.compositeRT)
+        break
+      }
+
+      case 'unifyLut': {
+        // 5.5 whole-frame LUT: компонуем весь кадр одной интерьерной текстурой
+        // (комната + тень + человек). Пинг-понг через shadowRT2 (свободен — тени
+        // отработали), блит обратно в compositeRT → bloom извлекается из грейда.
+        const u = this.unifyMat.uniforms
+        u.tSrc.value = this.compositeRT.texture
+        u.tLut.value = opts.lut
+        u.uLutSize.value = opts.lutSize
+        u.uLutStrength.value = opts.look.unify.lutStrength
+        this.pass(this.unifyMat, this.shadowRT2)
+        this.blitMat.uniforms.tSrc.value = this.shadowRT2.texture
+        this.pass(this.blitMat, this.compositeRT)
         break
       }
 

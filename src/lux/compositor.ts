@@ -53,6 +53,7 @@ export interface RenderOpts {
   backplateAspect: number | null
   person: THREE.Texture | null
   personAspect: number | null
+  scaleOverride?: { sx: number; sy: number }  // height-lock 1:1: единый масштаб фигуры+тени (заменяет cover-fit)
   lightDirX: number  // направление ключа интерьера: -1 слева, +1 справа, 0 сверху
   mirrorOpacity: number
   shadow: ShadowEllipse | null
@@ -503,9 +504,12 @@ export class LuxCompositor {
   render(opts: RenderOpts): void {
     const mirrorVisible = opts.mirrorOpacity > 0.001
 
-    // cover-fit фигуры (общий масштаб для тени и фигуры)
+    // cover-fit фигуры (общий масштаб для тени и фигуры) ИЛИ height-lock override
     let sx = 1, sy = 1
-    if (opts.personAspect) {
+    if (opts.scaleOverride) {
+      sx = opts.scaleOverride.sx
+      sy = opts.scaleOverride.sy
+    } else if (opts.personAspect) {
       const va = opts.personAspect
       const ca = opts.canvasAspect
       if (ca > va) sy = va / ca

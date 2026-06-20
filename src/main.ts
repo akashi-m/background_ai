@@ -22,6 +22,7 @@ import { personFloorWorld, sampleWorldXYZ, selectShadowMode, PoseSmoother } from
 import { parseDevFlags } from './lux/devFlags'
 import { LuxUI, interiorLabels } from './lux/ui'
 import { runGolden } from './lux/golden'
+import { loadLook } from './lux/look'
 
 async function fetchJson(url: string): Promise<unknown> {
   const res = await fetch(url)
@@ -63,7 +64,6 @@ async function start() {
     renderer,
     Math.floor(innerWidth * renderer.getPixelRatio()),
     Math.floor(innerHeight * renderer.getPixelRatio()),
-    { wrapStrength: LUX_CONFIG.wrapStrength, grainAmount: LUX_CONFIG.grainAmount, feather: LUX_CONFIG.feather, colorMatch: LUX_CONFIG.colorMatch, shadeAmount: LUX_CONFIG.shadeAmount, erode: LUX_CONFIG.erode, bloom: LUX_CONFIG.bloom, contrast: LUX_CONFIG.contrast, temp: LUX_CONFIG.temp },
   )
   addEventListener('resize', () => {
     renderer.setSize(innerWidth, innerHeight)
@@ -82,12 +82,13 @@ async function start() {
       loadLutTexture(w.meta.lut ? `/assets/worlds/${w.name}/${w.meta.lut}` : null),
     ),
   )
+  const worldLooks = await Promise.all(SCENE_CONFIG.worlds.map((n) => loadLook(n)))
   const switcher = new WorldSwitcher(worlds.length)
 
   // Детерминированный golden-кадр для before/after скрин-диффа (изолировано, см. golden.ts).
   // Возврат ДО живого цикла — на прод-путь не влияет.
   if (flags.golden) {
-    await runGolden({ renderer, compositor, world: worlds[0], lut: luts[0] })
+    await runGolden({ renderer, compositor, world: worlds[0], lut: luts[0], look: worldLooks[0] })
     return
   }
 
@@ -123,7 +124,9 @@ async function start() {
       { key: 'cast', label: 'colorMatch cast', min: 0, max: 1, step: 0.01, value: LUX_CONFIG.colorMatch.cast },
       { key: 'exposure', label: 'colorMatch exp', min: 0, max: 0.5, step: 0.01, value: LUX_CONFIG.colorMatch.exposure },
     ],
-    (key, value) => compositor.setTuning(key, value),
+    // Task 1: setTuning удалён (роль ушла в look). Колбэк — no-op заглушка;
+    // Task 2 переключит панель на правку look активного мира + Save look.json.
+    (_key, _value) => { /* no-op until Task 2 wires dev-panel → look */ },
   )
 
   new AlignController(() => worlds[switcher.index], () => SCENE_CONFIG.worlds[switcher.index])
@@ -268,6 +271,7 @@ async function start() {
       slides: slides.update(dt, 1 - experience.mirrorOpacity),
       timeSec: now / 1000,
       canvasAspect: innerWidth / innerHeight,
+      look: worldLooks[switcher.index],
     })
 
     ui.setActive(switcher.index)

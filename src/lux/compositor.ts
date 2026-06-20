@@ -5,17 +5,12 @@
 import * as THREE from 'three'
 
 import { LUX_CONFIG } from './config'
+import type { ResolvedLook } from './look'
 import { makeMultiplyBlitMat, makeBakedShadowMat } from './multiplyBlit'
 import type { ShadowEllipse } from './shadow'
 import type { ShadowCamera } from './shadowGeom'
 import { ShadowScene3D } from './shadowScene3D'
 import { activeStages, type StageFrame, type StageInputs, type StageId } from './stages'
-
-// Якорь «ступней» бейка в плейт-UV (проекция стойки [4.3,2.5,0]); база следует за feetUV.
-// Тюнятся по живой приёмке (флип/сдвиг — одна правка).
-const BAKED_FEET_U = 0.233
-const BAKED_FEET_V = 0.161
-const BAKED_RAISE = 0.05 // поднять базу на 5% вверх (юзер)
 
 export interface HarmonizeToggles {
   lut: boolean
@@ -74,6 +69,7 @@ export interface RenderOpts {
   slides: SlideState
   timeSec: number
   canvasAspect: number
+  look: ResolvedLook
 }
 
 export class LuxCompositor {
@@ -107,11 +103,6 @@ export class LuxCompositor {
     private renderer: THREE.WebGLRenderer,
     width: number,
     height: number,
-    tuning: {
-      wrapStrength: number; grainAmount: number; feather: [number, number]
-      colorMatch: { cast: number; exposure: number }; shadeAmount: number; erode: number
-      bloom: number; contrast: number; temp: number
-    },
   ) {
     this.sceneRT = new THREE.WebGLRenderTarget(width, height)
     this.wrapRT_A = new THREE.WebGLRenderTarget(width >> 2, height >> 2)
@@ -188,10 +179,10 @@ export class LuxCompositor {
     // финальное зерно на весь кадр: компонует composite → экран, добавляя шум
     this.grainMat = new THREE.ShaderMaterial({
       uniforms: {
-        tSrc: { value: null }, uGrain: { value: tuning.grainAmount },
+        tSrc: { value: null }, uGrain: { value: 0.07 },
         uGrainOn: { value: 1 }, uTime: { value: 0 },
         // общий Bloom: добавляется ДО зерна (свечение ярких зон поверх всего композита)
-        tBloom: { value: null }, uBloom: { value: tuning.bloom }, uBloomOn: { value: 1 },
+        tBloom: { value: null }, uBloom: { value: 0.5 }, uBloomOn: { value: 1 },
       },
       vertexShader: VERT,
       fragmentShader: /* glsl */ `
@@ -264,14 +255,14 @@ export class LuxCompositor {
         uOpacity: { value: 0 },
         uUvScale: { value: new THREE.Vector2(1, 1) },
         uUvOffset: { value: new THREE.Vector2(0, 0) },
-        uFeather: { value: new THREE.Vector2(tuning.feather[0], tuning.feather[1]) },
-        uErode: { value: tuning.erode }, // эрозия альфы (UV) — срезает гало-бахрому RVM
-        uWrapStrength: { value: tuning.wrapStrength },
-        uCast: { value: tuning.colorMatch.cast },
-        uExp: { value: tuning.colorMatch.exposure },
-        uContrast: { value: tuning.contrast }, // контраст вокруг средне-серого
-        uTemp: { value: tuning.temp },         // температура: тёплый(+)/холодный(−)
-        uShade: { value: tuning.shadeAmount },
+        uFeather: { value: new THREE.Vector2(0.4, 0.8) },
+        uErode: { value: 0.0025 }, // эрозия альфы (UV) — срезает гало-бахрому RVM
+        uWrapStrength: { value: 0.85 },
+        uCast: { value: 0.35 },
+        uExp: { value: 0.15 },
+        uContrast: { value: 1.08 }, // контраст вокруг средне-серого
+        uTemp: { value: 0.02 },         // температура: тёплый(+)/холодный(−)
+        uShade: { value: 0.18 },
         uShadeDirX: { value: 0 },
         uLutOn: { value: 1 },
         uWrapOn: { value: 1 },
@@ -435,21 +426,26 @@ export class LuxCompositor {
     })
   }
 
-  // Реал-тайм тюн пост-обработки (dev-панель): правит юниформы без пересборки.
-  setTuning(key: string, value: number): void {
+  // Статичные пер-мир юниформы из ResolvedLook (грейд/тон тени). Каждый кадр перед циклом
+  // стадий: look — единственный источник этих ручек (заменил конструкторный tuning/setTuning).
+  private applyLook(look: ResolvedLook): void {
     const p = this.personMat.uniforms
-    switch (key) {
-      case 'wrapStrength': p.uWrapStrength.value = value; break
-      case 'erode': p.uErode.value = value; break
-      case 'cast': p.uCast.value = value; break
-      case 'exposure': p.uExp.value = value; break
-      case 'contrast': p.uContrast.value = value; break
-      case 'temp': p.uTemp.value = value; break
-      case 'shade': p.uShade.value = value; break
-      case 'grainAmount': this.grainMat.uniforms.uGrain.value = value; break
-      case 'bloom': this.grainMat.uniforms.uBloom.value = value; break
-      case 'bloomThreshold': this.bloomBrightMat.uniforms.uThreshold.value = value; break
-    }
+    const g = look.grade
+    p.uWrapStrength.value = g.wrapStrength
+    p.uErode.value = look.matte.erode
+    p.uFeather.value.set(look.matte.feather[0], look.matte.feather[1])
+    p.uCast.value = g.colorMatch.cast
+    p.uExp.value = g.colorMatch.exposure
+    p.uContrast.value = g.contrast
+    p.uTemp.value = g.temp
+    p.uShade.value = g.shade
+    this.grainMat.uniforms.uGrain.value = look.unify.grain
+    this.grainMat.uniforms.uBloom.value = look.unify.bloom
+    this.bloomBrightMat.uniforms.uThreshold.value = look.unify.bloomThreshold
+    this.multiplyBlitMat.uniforms.uShadowTint.value.setRGB(
+      look.shadow.multiply.tint[0], look.shadow.multiply.tint[1], look.shadow.multiply.tint[2])
+    this.bakedShadowMat.uniforms.uMaxShadow.value = look.shadow.multiply.maxShadow
+    this.bakedShadowMat.uniforms.uFeetMask.value.set(look.shadow.baked.feetUV[0], look.shadow.baked.feetUV[1])
   }
 
   setSize(width: number, height: number): void {
@@ -488,6 +484,9 @@ export class LuxCompositor {
       if (ca > va) sy = va / ca
       else sx = ca / va
     }
+
+    // look — статичные пер-мир юниформы (грейд/тон тени) перед циклом стадий
+    this.applyLook(opts.look)
 
     const f: StageFrame = {
       opts: {
@@ -572,10 +571,13 @@ export class LuxCompositor {
         bsu.uUvScale.value.copy(this.coverMat.uniforms.uUvScale.value)
         // привязка к ступням: сдвиг маски так, чтобы «ноги» бейка легли в живые feetUV
         // (вид тени — как есть из Blender; двигаем только позицию). Нет feetUV → нативно.
+        const bakedFeetU = opts.look.shadow.baked.feetUV[0]
+        const bakedFeetV = opts.look.shadow.baked.feetUV[1]
+        const bakedRaise = opts.look.shadow.baked.raise
         if (opts.feetUV) {
-          bsu.uOffset.value.set(opts.feetUV.u - BAKED_FEET_U, opts.feetUV.v - BAKED_FEET_V + BAKED_RAISE)
+          bsu.uOffset.value.set(opts.feetUV.u - bakedFeetU, opts.feetUV.v - bakedFeetV + bakedRaise)
         } else {
-          bsu.uOffset.value.set(0, BAKED_RAISE)
+          bsu.uOffset.value.set(0, bakedRaise)
         }
         this.pass(this.bakedShadowMat, this.shadowRT2)
         this.blitMat.uniforms.tSrc.value = this.shadowRT2.texture
@@ -613,9 +615,9 @@ export class LuxCompositor {
         mbu.uUvScale.value.copy(this.coverMat.uniforms.uUvScale.value)
         mbu.uShadowStrength.value = opts.shadowStrength
         // бледный + сильно размытый: только намёк на движение поверх базы (капсульность прячется)
-        mbu.uCenterDark.value = 0.12
-        mbu.uEdgeDark.value = 0.03
-        mbu.uBlur.value = 0.014
+        mbu.uCenterDark.value = opts.look.shadow.proxy.centerDark
+        mbu.uEdgeDark.value = opts.look.shadow.proxy.edgeDark
+        mbu.uBlur.value = opts.look.shadow.proxy.blur
         // вырез прокси-тени у ног (контакт-стопу держит блоб). Центр = САМИ ступни (без +0.04
         // подъёма блоба — стопа прокси ниже), радиус щедрый, чтобы убрать остаток следа.
         if (opts.feetUV) {
@@ -624,7 +626,7 @@ export class LuxCompositor {
             Math.min(1, Math.max(0, (opts.feetUV.u - 0.5) / cs.x + 0.5)),
             Math.min(1, Math.max(0, (opts.feetUV.v - 0.5) / cs.y + 0.5)),
           )
-          mbu.uFeetCutR.value = 0.16
+          mbu.uFeetCutR.value = opts.look.shadow.proxy.feetCutR
         } else {
           mbu.uFeetCutR.value = 0.0
         }
@@ -652,11 +654,11 @@ export class LuxCompositor {
         // (ноги у кромки) центр не уезжает за кадр → контакт-тень не пропадает. 0.06→0.04: ниже 2% (юзер)
         b.uCenter.value.set(
           Math.min(1, Math.max(0, (opts.feetUV!.u - 0.5) / sx + 0.5)),
-          Math.min(1, Math.max(0, (opts.feetUV!.v - 0.5) / sy + 0.5 + 0.04)),
+          Math.min(1, Math.max(0, (opts.feetUV!.v - 0.5) / sy + 0.5 + opts.look.shadow.blob.raise)),
         )
         const rx = (opts.feetUV!.halfW / sx) * 1.0
-        b.uRadius.value.set(rx, rx * 0.3)
-        b.uOpacity.value = 0.36 * opts.mirrorOpacity // непрозрачность блоба = 0.36 (юзер)
+        b.uRadius.value.set(rx, rx * opts.look.shadow.blob.ratioY)
+        b.uOpacity.value = opts.look.shadow.blob.opacity * opts.mirrorOpacity // непрозрачность блоба = look.shadow.blob.opacity
         this.pass(this.blobMat, this.shadowRT)
         this.blitMat.uniforms.tSrc.value = this.shadowRT.texture
         this.pass(this.blitMat, this.compositeRT)

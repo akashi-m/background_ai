@@ -8,6 +8,7 @@ import * as THREE from 'three'
 
 import { LUX_CONFIG } from './config'
 import type { LuxCompositor } from './compositor'
+import type { ResolvedLook } from './look'
 import type { BuiltWorld } from '../scenes/worldScene'
 
 // Фикс-размер кадра (9:16, pixelRatio=1) — стабильно между прогонами независимо от окна.
@@ -48,8 +49,9 @@ export async function runGolden(deps: {
   compositor: LuxCompositor
   world: BuiltWorld
   lut: THREE.Data3DTexture
+  look: ResolvedLook
 }): Promise<void> {
-  const { renderer, compositor, world, lut } = deps
+  const { renderer, compositor, world, lut, look } = deps
   renderer.setPixelRatio(1)
   renderer.setSize(GOLDEN_W, GOLDEN_H)
   compositor.setSize(GOLDEN_W, GOLDEN_H)
@@ -88,6 +90,7 @@ export async function runGolden(deps: {
     slides: { a: null, b: null, mix: 0, visible: 0 },
     timeSec: 0, // замороженное время → зерно детерминировано
     canvasAspect: GOLDEN_W / GOLDEN_H,
+    look,
   }
 
   // Несколько кадров — на случай отложенной загрузки/аплоада текстур.

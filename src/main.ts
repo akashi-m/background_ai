@@ -9,19 +9,18 @@ import { buildWorld, saveDepthOverride, type BuiltWorld } from './scenes/worldSc
 import { dollyFromEyeZ } from './app/dolly'
 import { DebugPanel } from './debug/panel'
 import { AlignController } from './debug/align'
-import { SCENE_CONFIG } from './scenes/config'
+import { SCENE_CONFIG, STYLES } from './scenes/config'
 import { LUX_CONFIG } from './lux/config'
 import { PersonStream } from './lux/personStream'
 import { Experience } from './lux/experience'
 import { LuxCompositor, type HarmonizeToggles } from './lux/compositor'
 import { createDevPanel } from './lux/devPanel'
-import { IdleSlides } from './lux/idle'
 import { loadLutTexture } from './lux/lut'
 import { shadowFromBbox, SmoothedShadow } from './lux/shadow'
 import { personFloorWorld, sampleWorldXYZ, selectShadowMode, PoseSmoother } from './lux/shadowGeom'
 import { floorPointAnalytic, heightLockScale } from './lux/mirrorGeom'
 import { parseDevFlags } from './lux/devFlags'
-import { LuxUI, interiorLabels } from './lux/ui'
+import { LuxUI } from './lux/ui'
 import { runGolden } from './lux/golden'
 import { loadLook } from './lux/look'
 
@@ -51,7 +50,6 @@ async function start() {
   }
 
   const renderer = new THREE.WebGLRenderer({ antialias: false })
-  renderer.setSize(innerWidth, innerHeight)
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
   renderer.toneMapping = THREE.ACESFilmicToneMapping
   renderer.autoClear = false
@@ -59,17 +57,39 @@ async function start() {
   // игнорируется → тень не появляется. mapSize/bias на самой лампе (keyPointLights).
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = THREE.PCFSoftShadowMap
-  document.body.appendChild(renderer.domElement)
+
+  // Соотношение «фида» = портрет 9:16 (capture 1080×1920, плейты lobby/living).
+  // Зеркало ВСЕГДА этой формы: canvas — крупнейший прямоугольник 9:16, вписанный в
+  // окно и отцентрированный. На несовпадающем экране сверху/по бокам чёрные поля
+  // (letterbox) ВМЕСТО растяжения или обрезки низа. Единый источник правды аспекта;
+  // если физический экран другого формата — поменять только эту константу.
+  const FEED_ASPECT = 9 / 16
+  const stage = document.getElementById('stage') as HTMLDivElement
+  stage.appendChild(renderer.domElement)
+
+  // CSS-размер прямоугольника фида под текущее окно (центрируется flex-ом body).
+  let cssW = 0, cssH = 0
+  function computeFeedRect(): void {
+    if (innerWidth / innerHeight > FEED_ASPECT) { cssH = innerHeight; cssW = Math.round(innerHeight * FEED_ASPECT) }
+    else { cssW = innerWidth; cssH = Math.round(innerWidth / FEED_ASPECT) }
+  }
+  computeFeedRect()
 
   const compositor = new LuxCompositor(
     renderer,
-    Math.floor(innerWidth * renderer.getPixelRatio()),
-    Math.floor(innerHeight * renderer.getPixelRatio()),
+    Math.floor(cssW * renderer.getPixelRatio()),
+    Math.floor(cssH * renderer.getPixelRatio()),
   )
-  addEventListener('resize', () => {
-    renderer.setSize(innerWidth, innerHeight)
-    compositor.setSize(Math.floor(innerWidth * renderer.getPixelRatio()), Math.floor(innerHeight * renderer.getPixelRatio()))
-  })
+
+  function applyLayout(): void {
+    computeFeedRect()
+    stage.style.width = `${cssW}px`
+    stage.style.height = `${cssH}px`
+    renderer.setSize(cssW, cssH)
+    compositor.setSize(Math.floor(cssW * renderer.getPixelRatio()), Math.floor(cssH * renderer.getPixelRatio()))
+  }
+  applyLayout()
+  addEventListener('resize', applyLayout)
 
   // Миры-интерьеры + их LUT
   const worlds: BuiltWorld[] = await Promise.all(
@@ -101,15 +121,24 @@ async function start() {
     // форс через публичный механизм F5: крутим цикл до нужной фазы
     while (experience.phase !== flags.forcePhase) experience.forceNext()
   }
-  const slides = new IdleSlides(LUX_CONFIG.slideSec)
-  await slides.load(
-    worlds.filter((w) => w.meta.format === 'photo25d').map((w) => `/assets/worlds/${w.name}/${w.meta.file}`),
-  )
+  // Idle = чёрный экран: вместо слайдшоу подаём чёрный «слайд» с visible=1-mirrorOpacity.
+  // slideMat блендит его поверх композита по альфе → composite·mirrorOpacity, поэтому
+  // плавное угасание зеркала в чёрный сохраняется, а фон ожидания — чёрный.
+  const blackTex = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1, THREE.RGBAFormat)
+  blackTex.needsUpdate = true
   const shadowSmooth = new SmoothedShadow()
   const toggles: HarmonizeToggles = { lut: true, wrap: true, shadow: true, grain: true, colorMatch: true, bloom: true }
 
   const ui = new LuxUI((i) => switcher.switchTo(i))
-  ui.setWorlds(interiorLabels(worlds.map((w) => w.meta)))
+  ui.setStyles(STYLES, worlds)
+
+  // лого ожидания: PNG из assets; не загрузился → текстовый вордмарк-фолбэк
+  const logoImg = document.getElementById('lux-logo-img') as HTMLImageElement | null
+  const logoText = document.getElementById('lux-logo-text')
+  logoImg?.addEventListener('error', () => {
+    logoImg.style.display = 'none'
+    if (logoText) logoText.style.display = 'block'
+  })
 
   // Мелкий хелпер: мутирует obj по dotted-path (a.b.c)
   function setPath(obj: Record<string, unknown>, path: string, value: unknown): void {
@@ -244,7 +273,9 @@ async function start() {
     const safeZ = Math.min(Math.max(eye.z, 20), 300)
     const safeEye = { x: eye.x * parallaxGain, y: eye.y * parallaxGain, z: safeZ }
     const cmPerPx = calibration.screenWcm / screen.width
-    applyOffAxis(camera, safeEye, innerWidth * cmPerPx, innerHeight * cmPerPx)
+    // физ. размер ОТРЕНДЕРЕННОЙ области (прямоугольник фида), не всего окна —
+    // off-axis фрустум получает аспект canvas (=FEED_ASPECT), 3D-миры без искажения
+    applyOffAxis(camera, safeEye, cssW * cmPerPx, cssH * cmPerPx)
 
     const active = worlds[switcher.index]
     active.dolly.position.z = dollyFromEyeZ(safeZ, active.meta.dollyMaxCm)
@@ -302,7 +333,7 @@ async function start() {
         screenHcm: calibration.screenHcm,
         mirrorMag: look0.geom.mirrorMag,
         personAspect: person.videoAspect ?? 1,
-        canvasAspect: innerWidth / innerHeight,
+        canvasAspect: FEED_ASPECT,
       })
       const ks = 1 - Math.exp(-dt * 4)
       smoothScale = smoothScale
@@ -346,13 +377,13 @@ async function start() {
       lutSize: luts[switcher.index].image.width,
       toggles,
       fade: switcher.fade,
-      slides: slides.update(dt, 1 - experience.mirrorOpacity),
+      slides: { a: blackTex, b: blackTex, mix: 0, visible: 1 - experience.mirrorOpacity },
       timeSec: now / 1000,
-      canvasAspect: innerWidth / innerHeight,
+      canvasAspect: FEED_ASPECT,
       look: worldLooks[switcher.index],
     })
 
-    ui.setActive(switcher.index)
+    ui.setActive(worlds[switcher.index].name)
     ui.update(experience.mirrorOpacity)
 
     debug.frame(safeEye, tracker?.faceVisible ?? false, 0, videoLag(),

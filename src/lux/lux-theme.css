@@ -9,17 +9,51 @@
 }
 
 #lux-ui {
-  position: fixed;
+  position: absolute; /* привязан к #stage (рамке зеркала), не к окну */
   inset: 0;
   z-index: 5; /* над канвасом, под debug-панелью (z=10) */
   pointer-events: none; /* кликает только то, что включит себя само */
   font-family: var(--lux-font);
   color: var(--lux-text);
+}
+
+/* Слой состояния (data-idle / data-mirror): оба наложены на всю рамку,
+   кроссфейд через opacity ведёт ui.ts (idle = 1-mirrorOpacity, mirror = mirrorOpacity). */
+.lux-layer {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 4vh 4vw;
+  padding: 4vh 6%;
   text-align: center;
+}
+.lux-top, .lux-bottom { display: flex; flex-direction: column; align-items: center; }
+.lux-bottom-left { align-items: flex-start; text-align: left; } /* локация снизу-слева */
+
+/* Лого ожидания (белый PNG на прозрачном). Фолбэк .lux-logo (текст) — если файл не загрузился. */
+.lux-logo-img { width: clamp(150px, 44%, 360px); height: auto; display: block; }
+.lux-invite-top {
+  margin-top: 2.4vh;
+  font-size: clamp(12px, 1.3vw, 18px);
+  letter-spacing: 0.2em;
+  text-indent: 0.2em;
+  text-transform: uppercase;
+  color: var(--lux-gold-dim);
+}
+.lux-location {
+  font-size: clamp(11px, 1.15vw, 16px);
+  letter-spacing: 0.18em;
+  text-indent: 0.18em;
+  text-transform: uppercase;
+  color: var(--lux-text);
+  /* обведено пилюлей как .lux-btn (статичная метка локации, не кликабельна) */
+  padding: 1.15vh 2vw;
+  border: 1px solid rgba(217, 184, 120, 0.5);
+  border-radius: 999px;
+  background: rgba(11, 10, 8, 0.28);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 0 10px rgba(217, 184, 120, 0.18);
 }
 
 .lux-logo {
@@ -30,14 +64,6 @@
   text-shadow: 0 1px 12px rgba(0, 0, 0, 0.55);
 }
 .lux-logo span { color: var(--lux-gold); }
-.lux-tagline {
-  margin-top: 1.2vh;
-  font-size: clamp(11px, 1.1vw, 15px);
-  letter-spacing: 0.34em;
-  text-indent: 0.34em;
-  color: var(--lux-gold-dim);
-  text-transform: uppercase;
-}
 
 /* Слои состояний: видимость управляется из ui.ts через style.opacity */
 [data-idle], [data-mirror] {
@@ -53,14 +79,15 @@
   text-shadow: 0 1px 10px rgba(0, 0, 0, 0.6);
 }
 
-header [data-mirror] { margin-top: 2.4vh; } /* селектор интерьеров под слоганом */
-
 .lux-choose {
-  font-size: clamp(12px, 1.2vw, 16px);
+  font-size: clamp(13px, 1.35vw, 19px);
   letter-spacing: 0.3em;
   text-indent: 0.3em;
   text-transform: uppercase;
-  color: var(--lux-gold-dim);
+  font-weight: 600;
+  color: var(--lux-gold);
+  /* свечение + тень: ярче и читаемо на светлом фоне лобби */
+  text-shadow: 0 0 14px rgba(217, 184, 120, 0.45), 0 1px 8px rgba(0, 0, 0, 0.55);
   margin-bottom: 1.6vh;
 }
 
@@ -72,8 +99,7 @@ header [data-mirror] { margin-top: 2.4vh; } /* селектор интерьер
 }
 
 .lux-btn {
-  pointer-events: auto;
-  cursor: pointer;
+  cursor: pointer; /* pointer-events наследуется от .lux-layer (ui.ts включает в зеркале) */
   font-family: var(--lux-font);
   font-size: clamp(11px, 1.15vw, 16px);
   letter-spacing: 0.18em;
@@ -99,4 +125,18 @@ header [data-mirror] { margin-top: 2.4vh; } /* селектор интерьер
   color: var(--lux-gold);
   /* выбранный — ярче свечение (свет-контур сильнее) */
   box-shadow: 0 0 22px rgba(217, 184, 120, 0.55), inset 0 0 12px rgba(217, 184, 120, 0.12);
+}
+
+/* Пустышка (modern/classic/ferre — контента ещё нет): тусклая, некликабельная. */
+.lux-btn.placeholder,
+.lux-btn:disabled {
+  opacity: 0.38;
+  cursor: default;
+  pointer-events: none;
+  border-color: rgba(217, 184, 120, 0.3);
+  box-shadow: none;
+}
+.lux-btn.placeholder:hover {
+  border-color: rgba(217, 184, 120, 0.3);
+  box-shadow: none;
 }

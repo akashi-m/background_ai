@@ -6,7 +6,13 @@
   <title>Stellar Mirror</title>
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
-    canvas { display: block; }
+    /* окно центрирует #stage; вокруг — чёрные поля (letterbox) */
+    body { display: flex; align-items: center; justify-content: center; }
+    /* #stage — прямоугольник соотношения «фида» (портрет 9:16). Размер в px
+       ставит main.ts (computeFeedRect): крупнейший такой прямоугольник под окно. */
+    /* overflow:hidden — рамка фида = граница устройства: UI не бликует на поля */
+    #stage { position: relative; flex: 0 0 auto; overflow: hidden; }
+    #stage canvas { display: block; width: 100%; height: 100%; }
     #overlay {
       position: fixed; inset: 0; display: none;
       align-items: center; justify-content: center; text-align: center;
@@ -17,18 +23,30 @@
 </head>
 <body>
   <div id="overlay"></div>
-  <div id="lux-ui">
-    <header>
-      <div class="lux-logo">STELLAR <span>RESIDENCE</span></div>
-      <div class="lux-tagline">Увидь свою новую реальность</div>
-      <div data-mirror style="opacity:0">
-        <div class="lux-choose">Выберите интерьер</div>
-        <nav class="lux-interiors" id="lux-interiors"></nav>
+  <div id="stage">
+    <div id="lux-ui">
+      <!-- Ожидание: лого + приглашение сверху, «Подойдите ближе» снизу. Фон — чёрный. -->
+      <div class="lux-layer" data-idle>
+        <header class="lux-top">
+          <img id="lux-logo-img" class="lux-logo-img" alt="Stellar Residence" src="/assets/ui/logo.png">
+          <div id="lux-logo-text" class="lux-logo" style="display:none">STELLAR <span>RESIDENCE</span></div>
+          <div class="lux-invite-top">Хотите увидеть себя в интерьере?</div>
+        </header>
+        <footer class="lux-bottom">
+          <div class="lux-invite">Подойдите ближе</div>
+        </footer>
       </div>
-    </header>
-    <footer>
-      <div class="lux-invite" data-idle>Подойдите ближе</div>
-    </footer>
+      <!-- Зеркало: «Выберите интерьер» + кнопки стилей сверху, локация снизу-слева. -->
+      <div class="lux-layer" data-mirror style="opacity:0">
+        <header class="lux-top">
+          <div class="lux-choose">Выберите интерьер</div>
+          <nav class="lux-interiors" id="lux-interiors"></nav>
+        </header>
+        <footer class="lux-bottom lux-bottom-left">
+          <div class="lux-location" id="lux-location">Лобби</div>
+        </footer>
+      </div>
+    </div>
   </div>
   <script type="module" src="/src/main.ts"></script>
 </body>

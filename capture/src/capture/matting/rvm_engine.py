@@ -1,6 +1,10 @@
 """RobustVideoMatting (ONNX): качественные края, рекуррентное состояние.
 
-Провайдеры: CoreML (Mac) → CUDA/TensorRT (прод) → CPU (фолбэк).
+Провайдеры (по приоритету): CUDA (NVIDIA) → DirectML (любой GPU на Windows) → CPU.
+GPU включается ВЫБОРОМ ПАКЕТА onnxruntime на устройстве: `onnxruntime-gpu` (CUDA) или
+`onnxruntime-directml` (DML). Базовый `onnxruntime` = ТОЛЬКО CPU — отсюда CPU-нагрузка
+даже на машине с видеокартой. CoreML на этой модели медленнее CPU (M4, 720p: 63 vs 53 мс —
+граф рвётся на ~20 партиций), поэтому его не держим.
 """
 
 import numpy as np
@@ -9,10 +13,11 @@ import onnxruntime as ort
 
 class RvmEngine:
     def __init__(self, model_path: str, downsample_ratio: float = 0.25) -> None:
-        # CoreML на этой модели МЕДЛЕННЕЕ CPU (замер M4, 720p: 63 мс vs 53 мс —
-        # граф рвётся на 20 партиций). Порядок: CUDA (прод) → CPU.
+        # GPU-провайдер активен, ТОЛЬКО если на устройстве стоит соответствующий пакет
+        # onnxruntime (gpu→CUDA / directml→DML); иначе фильтр оставит CPU. TensorRT можно
+        # добавить первым при наличии — быстрее, но долгий прогрев движка на старте.
         providers = [
-            p for p in ("CUDAExecutionProvider", "CPUExecutionProvider")
+            p for p in ("CUDAExecutionProvider", "DmlExecutionProvider", "CPUExecutionProvider")
             if p in ort.get_available_providers()
         ]
         self._sess = ort.InferenceSession(model_path, providers=providers)

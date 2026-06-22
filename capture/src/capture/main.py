@@ -44,7 +44,10 @@ def main(argv: list[str] | None = None) -> None:
 
     configure_bitrate(cfg.bitrate_mbps)  # до первого offer: энкодер читает глобалы
 
-    pipeline = Pipeline(source, engine, PresenceConfig(), pose=pose)
+    pipeline = Pipeline(
+        source, engine, PresenceConfig(), pose=pose,
+        parallel_pose=cfg.parallel_pose, pose_every=cfg.pose_every, profile=cfg.profile,
+    )
     pipeline.start()
 
     app = build_app(pipeline)

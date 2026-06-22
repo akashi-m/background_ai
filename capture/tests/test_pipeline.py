@@ -205,3 +205,44 @@ def test_pipeline_skips_pose_when_none(tmp_path: Path) -> None:
         assert p.stats().landmarks is None
     finally:
         p.stop()
+
+
+def test_pipeline_pose_stride_skips_frames() -> None:
+    """--pose-every N: позу зовём реже, чем кадры; landmarks всё равно заполнены."""
+    pose = FakePoseEngine()
+    p = Pipeline(StallingSource(frames=30), FakeEngine(), PresenceConfig(),
+                 pose=pose, pose_every=3)
+    p.start()
+    try:
+        deadline = time.monotonic() + 5.0
+        while p.stats().frames < 30 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        time.sleep(0.2)                       # дать дозабрать последние pose-future
+        frames = p.stats().frames
+        assert frames >= 28
+        assert pose.calls > 0                 # поза вызывается
+        assert pose.calls < frames            # но реже кадров (stride прорежает)
+        assert p.stats().landmarks is not None  # на пропущенных переиспользуем последнюю
+    finally:
+        p.stop()
+
+
+def test_pipeline_pose_serial_mode(tmp_path: Path) -> None:
+    """--no-parallel-pose: поза считается инлайн (без отдельного потока), landmarks заполнены."""
+    clip = tmp_path / "serial.mp4"
+    make_clip(clip, frames=30, w=64, h=48)
+    from capture.sources.file import FileSource
+
+    pose = FakePoseEngine()
+    p = Pipeline(FileSource(str(clip)), FakeEngine(), PresenceConfig(),
+                 pose=pose, parallel_pose=False)
+    assert p._pose_pool is None               # серийный режим — пула нет
+    p.start()
+    try:
+        deadline = time.monotonic() + 5.0
+        while p.stats().landmarks is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert p.stats().landmarks is not None
+        assert pose.calls > 0
+    finally:
+        p.stop()

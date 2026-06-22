@@ -84,3 +84,24 @@ def test_pose_config_defaults() -> None:
 def test_pose_model_path_override() -> None:
     cfg = CaptureConfig(pose_model_path="/custom/pose.task")
     assert cfg.pose_model_path == "/custom/pose.task"
+
+
+def test_perf_flags_defaults() -> None:
+    cfg = CaptureConfig()
+    assert cfg.parallel_pose is True     # по умолч. поза параллельно матту
+    assert cfg.pose_every == 1
+    assert cfg.profile is False
+
+
+def test_parse_perf_flags() -> None:
+    cfg = parse_args(["--no-parallel-pose", "--pose-every", "2", "--profile"])
+    assert cfg.parallel_pose is False
+    assert cfg.pose_every == 2
+    assert cfg.profile is True
+
+
+def test_parse_pose_every_bad() -> None:
+    import pytest
+
+    with pytest.raises(SystemExit):
+        parse_args(["--pose-every", "0"])

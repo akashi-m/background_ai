@@ -22,6 +22,9 @@ class CaptureConfig(BaseModel):
     bitrate_mbps: float = 8.0    # битрейт VP8 (loopback): резкость live-композита
     pose_enabled: bool = True    # включать MediaPipe Pose в pipeline (v2-тень)
     pose_model_path: str = ""    # override .task; пусто → {models_dir}/pose_landmarker_full.task
+    parallel_pose: bool = True   # позу считать в отд. потоке параллельно матту (overlap на 2 ядрах)
+    pose_every: int = 1          # считать позу каждый N-й кадр (stride; на пропущенных — последняя)
+    profile: bool = False        # печатать per-stage мс/fps в stderr (диагностика)
 
 
 def auto_bitrate_mbps(width: int, height: int) -> float:
@@ -58,6 +61,12 @@ def parse_args(argv: list[str] | None = None) -> CaptureConfig:
     p.add_argument("--models-dir", default="models")
     p.add_argument("--bitrate", type=float, default=None,
                    help="битрейт VP8 в Мбит/с (loopback); по умолчанию авто по разрешению")
+    p.add_argument("--no-parallel-pose", dest="parallel_pose", action="store_false",
+                   help="считать позу серийно (по умолч. — параллельно матту, overlap на 2 ядрах)")
+    p.add_argument("--pose-every", type=int, default=1,
+                   help="считать позу каждый N-й кадр (stride; N≥1, на пропущенных — последняя)")
+    p.add_argument("--profile", action="store_true",
+                   help="печатать per-stage мс/fps в stderr (диагностика производительности)")
     a = p.parse_args(argv)
 
     source, file_path = a.source, ""
@@ -69,6 +78,8 @@ def parse_args(argv: list[str] | None = None) -> CaptureConfig:
         p.error("источник file требует путь: --source file:клип.mp4")
     if not 0.05 <= a.ratio <= 1.0:
         p.error(f"--ratio вне диапазона 0.05..1.0: {a.ratio}")
+    if a.pose_every < 1:
+        p.error(f"--pose-every должно быть ≥ 1: {a.pose_every}")
     # B2: гард ratio↔разрешение (только RVM). Вне зоны — край матта страдает (под/пере-разрешение
     # ветки сегментации). Лог-only, поведение не меняем; у тебя 0.4@1080p → 768px = в норме.
     if a.engine == "rvm":
@@ -88,4 +99,5 @@ def parse_args(argv: list[str] | None = None) -> CaptureConfig:
         engine=a.engine, model=a.model, ratio=a.ratio,
         width=a.width, height=a.height, rotate=a.rotate,
         port=a.port, models_dir=a.models_dir, bitrate_mbps=bitrate,
+        parallel_pose=a.parallel_pose, pose_every=a.pose_every, profile=a.profile,
     )

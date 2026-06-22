@@ -23,8 +23,9 @@ def test_main_forwards_pose_to_pipeline(monkeypatch) -> None:
     monkeypatch.setattr(main_mod, "make_pose_engine", lambda cfg: sentinel_pose)
 
     class _FakePipeline:
-        def __init__(self, source, engine, presence_cfg, pose=None) -> None:
+        def __init__(self, source, engine, presence_cfg, pose=None, **kwargs) -> None:
             captured["pose"] = pose
+            captured["kwargs"] = kwargs  # parallel_pose/pose_every/profile форвардятся из cfg
 
         def start(self) -> None: ...
 

@@ -112,3 +112,26 @@ def test_iobinding_matches_run_bit_exact() -> None:
         fg_i, a_i = io_eng.process(rgb)
         assert np.array_equal(a_r, a_i)                     # альфа (край матта!) — бит-в-бит
         assert np.array_equal(fg_r, fg_i)
+
+
+def test_u8_fallback_to_fp32_on_load_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """u8-граф не идёт на провайдере → движок честно откатывается на fp32, а НЕ падает.
+
+    Симулируем отказ загрузки *_u8.onnx (как было бы при нехватке op-coverage в DML/CUDA).
+    """
+    if not (MODELS / "rvm_resnet50_fp32_u8.onnx").exists():
+        pytest.skip("нет u8-модели — запусти scripts/optimize-rvm-model.py")
+    import capture.matting.rvm_engine as rvm_mod
+
+    real = rvm_mod.ort.InferenceSession
+
+    def fake(path: str, *args: object, **kwargs: object) -> object:
+        if str(path).endswith("_u8.onnx"):
+            raise RuntimeError("симуляция: u8-граф не поддержан провайдером")
+        return real(path, *args, **kwargs)
+
+    monkeypatch.setattr(rvm_mod.ort, "InferenceSession", fake)
+    eng = rvm_mod.RvmEngine(str(MODELS / "rvm_resnet50_fp32.onnx"), downsample_ratio=0.4)
+    assert eng._u8 is False                                 # откатился на fp32
+    _, a = eng.process(synthetic_frame())                   # и работает
+    assert a.dtype == np.float32 and a.shape == (240, 320)

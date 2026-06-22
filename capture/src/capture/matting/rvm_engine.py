@@ -23,29 +23,43 @@ class RvmEngine:
             p for p in ("CUDAExecutionProvider", "DmlExecutionProvider", "CPUExecutionProvider")
             if p in ort.get_available_providers()
         ]
-        # *_u8.onnx (scripts/optimize-rvm-model.py): UINT8-вход NHWC, /255+transpose в графе
-        # на GPU. По PCIe летит uint8 вместо float32 (в 4× меньше), CPU больше не кастит/
-        # транспонирует. Бит-в-бит то же pha/fgr (Cast+Div(255) == astype(f32)/255). Если
-        # файла нет — обычный float32-путь.
-        u8_path = Path(model_path).with_name(Path(model_path).stem + "_u8.onnx")
-        self._u8 = u8_path.exists()
+        self._ratio = np.array([downsample_ratio], dtype=np.float32)
         so = ort.SessionOptions()
         so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-        self._sess = ort.InferenceSession(
-            str(u8_path) if self._u8 else model_path, sess_options=so, providers=providers
-        )
+        # *_u8.onnx (scripts/optimize-rvm-model.py): UINT8-вход NHWC, /255+transpose в графе.
+        # По PCIe летит uint8 вместо float32 (в 4× меньше), CPU не кастит/транспонирует;
+        # pha/fgr бит-в-бит те же. ROBUST: если u8-граф не грузится/не идёт на ЭТОМ провайдере
+        # (op-coverage DML/CUDA) — ловим пробой и честно откатываемся на fp32, а не падаем.
+        u8_path = Path(model_path).with_name(Path(model_path).stem + "_u8.onnx")
+        self._u8 = u8_path.exists()
+        sess = None
+        if self._u8:
+            try:
+                sess = ort.InferenceSession(str(u8_path), sess_options=so, providers=providers)
+                self._probe(sess)  # u8-граф реально исполняется на активном провайдере?
+            except Exception:  # noqa: BLE001 — u8 не пошёл на провайдере → fp32
+                print("[rvm] *_u8.onnx не пошёл на провайдере → fp32-путь", file=sys.stderr)
+                self._u8 = False
+                sess = None
+        if sess is None:
+            sess = ort.InferenceSession(model_path, sess_options=so, providers=providers)
+        self._sess = sess
         # IO-binding включаем ТОЛЬКО на GPU: bind_cpu_input КОПИРУЕТ хост-буфер (без
         # lifetime-ловушки ortvalue_from_numpy, которая врапит и молча портит вход). На CPU
-        # io-binding ~5% медленнее обычного run, поэтому там оставляем sess.run. На ЛЮБОЙ
-        # ошибке io-пути — безопасный откат на sess.run (live-захват не падает).
+        # io-binding ~5% медленнее обычного run. На ЛЮБОЙ ошибке io-пути — откат на sess.run.
         active = self._sess.get_providers()[0]
         self._gpu = active in ("CUDAExecutionProvider", "DmlExecutionProvider")
         self._io = self._sess.io_binding() if self._gpu else None
         self._in_name = "src_u8" if self._u8 else "src"
         self._out_names = ["fgr", "pha", "r1o", "r2o", "r3o", "r4o"]
-        self._ratio = np.array([downsample_ratio], dtype=np.float32)
         self._rec: list[np.ndarray] = [np.zeros((1, 1, 1, 1), dtype=np.float32)] * 4
         self._shape: tuple[int, int] | None = None
+
+    def _probe(self, sess: ort.InferenceSession) -> None:
+        """Прогон u8-модели на dummy-кадре: убедиться, что граф идёт на активном провайдере."""
+        z = np.zeros((1, 1, 1, 1), dtype=np.float32)
+        sess.run(None, {"src_u8": np.zeros((1, 64, 64, 3), dtype=np.uint8),
+                        "r1i": z, "r2i": z, "r3i": z, "r4i": z, "downsample_ratio": self._ratio})
 
     def process(self, rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         if rgb.shape[:2] != self._shape:

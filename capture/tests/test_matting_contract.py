@@ -90,3 +90,25 @@ def test_rvm_survives_resolution_change() -> None:
     _, a2 = e.process(synthetic_frame(640, 480))  # раньше падало в ONNX Expand
     assert a1.shape == (240, 320)
     assert a2.shape == (480, 640)
+
+
+def test_iobinding_matches_run_bit_exact() -> None:
+    """io-binding путь (в проде GPU-гейтнут) == sess.run бит-в-бит. Форсим io-ветку на CPU.
+
+    Страховка: на CPU io-ветка обычными тестами НЕ исполняется → её легко сломать молча
+    будущей правкой. Тест ловит регресс там, где модели есть (dev-машины).
+    """
+    if not (MODELS / "rvm_resnet50_fp32.onnx").exists():
+        pytest.skip("нет модели rvm_resnet50")
+    from capture.matting.rvm_engine import RvmEngine
+
+    model = str(MODELS / "rvm_resnet50_fp32.onnx")
+    run_eng = RvmEngine(model, downsample_ratio=0.4)        # обычный sess.run (self._gpu=False)
+    io_eng = RvmEngine(model, downsample_ratio=0.4)
+    io_eng._io = io_eng._sess.io_binding()                  # форсим io-binding ветку на CPU
+    for _ in range(4):                                      # рекуррентная последовательность
+        rgb = synthetic_frame()
+        fg_r, a_r = run_eng.process(rgb)
+        fg_i, a_i = io_eng.process(rgb)
+        assert np.array_equal(a_r, a_i)                     # альфа (край матта!) — бит-в-бит
+        assert np.array_equal(fg_r, fg_i)
